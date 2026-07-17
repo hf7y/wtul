@@ -1,0 +1,5 @@
+# Trigger auto-rip when an audio CD is inserted into any optical drive.
+# ID_CDROM_MEDIA_TRACK_COUNT_AUDIO is only set by udev's cdrom_id helper when
+# the inserted disc actually has audio tracks, so this won't fire for blank
+# discs, data CDs/DVDs, etc.
+ACTION=="change", SUBSYSTEM=="block", KERNEL=="sr[0-9]*", ENV{ID_CDROM_MEDIA_TRACK_COUNT_AUDIO}=="?*", TAG+="systemd", ENV{SYSTEMD_WANTS}="cd-autorip@%k.service"

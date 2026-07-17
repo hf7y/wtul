@@ -1,0 +1,682 @@
+#!/usr/bin/env python3
+"""Interactive CD auto-ripper: watches the drive, scrapes metadata on
+insert, lets you set a track priority order, then rips via abcde.
+
+Replaces the old udev/systemd auto-trigger (disabled by install.sh) as the
+thing that actually starts a rip - launch this once and it handles every
+disc you insert until you quit it.
+"""
+import fcntl
+import glob
+import os
+import re
+import select
+import shutil
+import subprocess
+import sys
+import time
+
+DEV = f"/dev/{sys.argv[1]}" if len(sys.argv) > 1 else "/dev/sr0"
+DEVNAME = os.path.basename(DEV)
+HOME = os.path.expanduser("~")
+RIPDIR = os.path.join(HOME, "Music", "ripped")
+LOGDIR = os.path.join(RIPDIR, ".logs")
+LOCKFILE = f"/tmp/cd-autorip-{DEVNAME}.lock"
+NOEJECT_CONF = os.path.join(HOME, ".abcde-noeject.conf")
+
+PER_TRACK_TIMEOUT = 900       # 15 min/track cap - a bad drive can't hang forever
+MAX_LOG_BYTES = 5_000_000     # matches the old wrapper's runaway-log cap
+POLL_SECS = 2                 # how often we check the drive while idle
+STALE_TEMPDIR_SECS = 6 * 3600 # abandoned rip scratch dirs older than this get pruned
+
+
+def sh(cmd, timeout=None):
+    """Run a command, return (returncode, combined stdout+stderr text).
+
+    stdin is always /dev/null: abcde's -N flag doesn't suppress every
+    interactive prompt (e.g. "Is the CD multi-artist?" on an unidentified
+    disc still asks), and without this it reads from wtul-rip's own
+    controlling terminal - silently eating keystrokes meant for our own
+    prompts and blocking on prompts you'd never see coming.
+    """
+    try:
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, timeout=timeout, text=True)
+        return p.returncode, p.stdout
+    except subprocess.TimeoutExpired as e:
+        out = e.output or ""
+        return 124, out if isinstance(out, str) else out.decode(errors="replace")
+
+
+def udev_props(dev):
+    rc, out = sh(["udevadm", "info", "--query=property", f"--name={dev}"])
+    props = {}
+    for line in out.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            props[k] = v
+    return props
+
+
+def disc_audio_track_count(dev):
+    props = udev_props(dev)
+    if props.get("ID_CDROM_MEDIA") != "1":
+        return 0
+    return int(props.get("ID_CDROM_MEDIA_TRACK_COUNT_AUDIO", "0") or "0")
+
+
+class Lock:
+    def __init__(self, path):
+        self.path = path
+        self.fh = None
+
+    def acquire(self):
+        self.fh = open(self.path, "w")
+        try:
+            fcntl.flock(self.fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            self.fh.close()
+            self.fh = None
+            return False
+        return True
+
+    def release(self):
+        if self.fh:
+            fcntl.flock(self.fh, fcntl.LOCK_UN)
+            self.fh.close()
+            self.fh = None
+
+
+def free_kb(path):
+    st = os.statvfs(path)
+    return st.f_bavail * st.f_frsize // 1024
+
+
+def newest_abcde_tempdir():
+    dirs = glob.glob(os.path.join(RIPDIR, "abcde.*"))
+    dirs = [d for d in dirs if os.path.isdir(d)]
+    if not dirs:
+        return None
+    return max(dirs, key=os.path.getmtime)
+
+
+def parse_cddb_metadata(tempdir):
+    """Read the cddbread.0 abcde writes after a metadata scrape."""
+    path = os.path.join(tempdir, "cddbread.0")
+    fields = {}
+    if os.path.exists(path):
+        with open(path, "r", errors="replace") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if "=" in line and not line.startswith("#"):
+                    k, v = line.split("=", 1)
+                    fields[k] = v
+
+    discid = fields.get("DISCID", "")
+    dtitle = fields.get("DTITLE", "Unknown Artist / Unknown Album")
+    if " / " in dtitle:
+        artist, album = dtitle.split(" / ", 1)
+    else:
+        artist, album = dtitle, ""
+    titles = {}
+    for k, v in fields.items():
+        m = re.match(r"^TTITLE(\d+)$", k)
+        if m:
+            titles[int(m.group(1)) + 1] = v  # TTITLE0 -> track 1
+    return discid, artist, album, titles
+
+
+def write_cddbread(tempdir, artist, album, titles):
+    """Rewrite cddbread.0 with edited artist/album/track titles so the next
+    per-track abcde invocation (which re-reads this file fresh) tags and
+    names files with the correction instead of the original scrape."""
+    path = os.path.join(tempdir, "cddbread.0")
+    lines = []
+    if os.path.exists(path):
+        with open(path, "r", errors="replace") as f:
+            lines = f.readlines()
+    out = []
+    for line in lines:
+        if line.startswith("DTITLE="):
+            out.append(f"DTITLE={artist} / {album}\n")
+            continue
+        m = re.match(r"^TTITLE(\d+)=", line)
+        if m:
+            idx = int(m.group(1))
+            out.append(f"TTITLE{idx}={titles.get(idx + 1, '')}\n")
+            continue
+        out.append(line if line.endswith("\n") else line + "\n")
+    with open(path, "w") as f:
+        f.writelines(out)
+
+
+def find_track_file(album_dir, track_num):
+    if not os.path.isdir(album_dir):
+        return None
+    for name in os.listdir(album_dir):
+        if re.match(rf"^0*{track_num}-.*\.mp3$", name, re.IGNORECASE):
+            return os.path.join(album_dir, name)
+    return None
+
+
+def retag_mp3(path, artist=None, album=None, title=None):
+    from mutagen.easyid3 import EasyID3
+    tags = EasyID3(path)
+    if artist is not None:
+        tags["artist"] = artist
+    if album is not None:
+        tags["album"] = album
+    if title is not None:
+        tags["title"] = title
+    tags.save()
+
+
+def retag_ripped_tracks(ripped, old_artist, old_album, new_artist, new_album, discid):
+    """Move + retag mp3s for tracks already ripped this session after a
+    live artist=/album= correction, so a fix doesn't only apply going
+    forward - it also repairs what the disc already produced."""
+    if not ripped:
+        return
+    old_dir = album_dir_path(old_artist, old_album, discid)
+    new_dir = album_dir_path(new_artist, new_album, discid)
+    if old_dir == new_dir:
+        for n, path in list(ripped.items()):
+            retag_mp3(path, artist=new_artist, album=new_album)
+        return
+    os.makedirs(new_dir, exist_ok=True)
+    for n, path in list(ripped.items()):
+        if not os.path.exists(path):
+            continue
+        new_path = os.path.join(new_dir, os.path.basename(path))
+        os.rename(path, new_path)
+        retag_mp3(new_path, artist=new_artist, album=new_album)
+        ripped[n] = new_path
+    try:
+        if not os.listdir(old_dir):
+            os.rmdir(old_dir)
+            parent = os.path.dirname(old_dir)
+            if os.path.isdir(parent) and not os.listdir(parent):
+                os.rmdir(parent)
+    except OSError:
+        pass
+
+
+def apply_live_input(line, queue, tempdir, artist, album, titles, ripped, discid):
+    """Parse one line of live user input typed while ripping is underway.
+    Returns (artist, album, titles, control) - control is None, "stop"
+    (q/!q: leave the rest of the queue unripped, disc stays for retry) or
+    "eject" (e/!e: stop and eject now regardless of what's left). Mutates
+    queue in place to reprioritize remaining tracks, and retags/moves any
+    already-ripped tracks (in `ripped`) when artist/album changes.
+
+    The !-prefixed forms only differ from the bare forms while a track is
+    actively ripping (sh_live() kills it immediately instead of waiting
+    for it to finish) - here, between tracks, there's nothing running to
+    kill, so q/!q and e/!e are handled identically.
+    """
+    line = line.strip()
+    if not line:
+        return artist, album, titles, None
+
+    low = line.lower()
+    if low in ("q", "!q"):
+        print("  -> stopping after this track, disc stays in the drive")
+        return artist, album, titles, "stop"
+    if low in ("e", "!e"):
+        print("  -> stopping and ejecting now")
+        return artist, album, titles, "eject"
+
+    m = re.match(r"^(artist|album)\s*=\s*(.+)$", line, re.IGNORECASE)
+    if m:
+        key, val = m.group(1).lower(), m.group(2).strip()
+        old_artist, old_album = artist, album
+        if key == "artist":
+            artist = val
+        else:
+            album = val
+        write_cddbread(tempdir, artist, album, titles)
+        try:
+            retag_ripped_tracks(ripped, old_artist, old_album, artist, album, discid)
+        except ImportError:
+            print("  -> (mutagen not available, couldn't retag already-ripped tracks)")
+        fixed = f", fixed {len(ripped)} already-ripped track(s)" if ripped else ""
+        print(f"  -> {key} set to '{val}'{fixed}")
+        return artist, album, titles, None
+
+    m = re.match(r"^(\d+)\s*=\s*(.+)$", line)
+    if m:
+        n, val = int(m.group(1)), m.group(2).strip()
+        titles[n] = val
+        write_cddbread(tempdir, artist, album, titles)
+        if n in ripped:
+            try:
+                retag_mp3(ripped[n], title=val)
+                print(f"  -> track {n} title set to '{val}' (retagged)")
+            except ImportError:
+                print(f"  -> track {n} title set to '{val}' (mutagen unavailable, couldn't retag)")
+        else:
+            print(f"  -> track {n} title set to '{val}'")
+        return artist, album, titles, None
+
+    if re.match(r"^\d+(\s+\d+)*$", line):
+        nums = [int(t) for t in line.split()]
+        front = [n for n in nums if n in queue]
+        if front:
+            rest = [n for n in queue if n not in front]
+            queue[:] = front + rest
+            print(f"  -> priority updated, remaining order: {', '.join(str(n) for n in queue)}")
+        else:
+            print("  -> none of those track numbers are still remaining, ignoring")
+        return artist, album, titles, None
+
+    print(f"  -> didn't understand '{line}', ignoring")
+    return artist, album, titles, None
+
+
+def fix_by_discid(discid):
+    """Fix an already-completed unidentified disc after the fact - unlike
+    live in-session edits, this works even after wtul-rip has moved on,
+    because the disc ID is baked into the "Unknown Album (discid)" folder
+    name itself."""
+    matches = glob.glob(os.path.join(RIPDIR, "*", f"*({discid})"))
+    if not matches:
+        print(f"No ripped album found for disc ID '{discid}'.")
+        return
+    old_dir = matches[0]
+    print(f"Found: {old_dir}")
+    new_artist = input("New artist (blank to keep 'Unknown Artist'): ").strip() or "Unknown Artist"
+    new_album = input("New album (blank to keep current): ").strip()
+    if not new_album:
+        print("No album given, leaving as-is.")
+        return
+    new_dir = os.path.join(RIPDIR, new_artist, new_album)
+    os.makedirs(new_dir, exist_ok=True)
+    try:
+        from mutagen.easyid3 import EasyID3
+    except ImportError:
+        print("mutagen not available - can't retag.")
+        return
+    moved = 0
+    for name in os.listdir(old_dir):
+        if not name.lower().endswith(".mp3"):
+            continue
+        old_path = os.path.join(old_dir, name)
+        new_path = os.path.join(new_dir, name)
+        os.rename(old_path, new_path)
+        retag_mp3(new_path, artist=new_artist, album=new_album)
+        moved += 1
+    try:
+        if not os.listdir(old_dir):
+            os.rmdir(old_dir)
+    except OSError:
+        pass
+    print(f"Moved and retagged {moved} track(s) to {new_dir}")
+
+
+def track_durations(dev):
+    rc, out = sh(["cdparanoia", "-Q", "-d", dev], timeout=30)
+    durations = {}
+    for line in out.splitlines():
+        m = re.match(r"\s*(\d+)\.\s+\d+\s+\[(\d+:\d+\.\d+)\]", line)
+        if m:
+            durations[int(m.group(1))] = m.group(2).rsplit(".", 1)[0]
+    return durations
+
+
+def existing_track_numbers(album_dir):
+    """Track numbers that already have a ripped mp3 in album_dir."""
+    got = set()
+    if os.path.isdir(album_dir):
+        for name in os.listdir(album_dir):
+            m = re.match(r"^0*(\d+)-", name)
+            if m and name.lower().endswith(".mp3"):
+                got.add(int(m.group(1)))
+    return got
+
+
+def album_dir_path(artist, album, discid):
+    """Where abcde will actually place this disc's files. Must mirror the
+    OUTPUTFORMAT disambiguation in abcde.conf: unidentified discs all share
+    the literal "Unknown Album" title, so without the disc ID suffix every
+    unidentified disc would resolve to the same folder and each would look
+    like the others' tracks were already ripped."""
+    artist_clean = artist.strip() or "Unknown Artist"
+    album_clean = album.strip() or "Unknown Album"
+    if album_clean == "Unknown Album":
+        album_clean = f"Unknown Album ({discid})"
+    return os.path.join(RIPDIR, artist_clean, album_clean)
+
+
+def print_tracklist(track_nums, titles, durations, already_done):
+    print()
+    for n in track_nums:
+        tag = " (done)" if n in already_done else ""
+        dur = durations.get(n, "?:??")
+        print(f"  {n:2d}. {titles.get(n, f'Track {n}'):40s} {dur:>6s}{tag}")
+    print()
+
+
+def sh_live(cmd, logfile):
+    """Like sh(), but streams the subprocess's output line-by-line to the
+    terminal as it happens (so you can watch a track actually rip/encode)
+    while also appending it to logfile, capped at MAX_LOG_BYTES total same
+    as before.
+
+    Concurrently watches stdin while the track runs: '!q'/'!e' kill the
+    subprocess immediately (a typed equivalent of Ctrl+C, optionally
+    followed by ejecting) instead of waiting for the track to finish.
+    Any other line typed during the track is stashed in `pending` and
+    returned for the normal between-track handling in rip_session(),
+    since it's not urgent enough to interrupt anything.
+
+    Returns (returncode, saw_error, urgent, pending) - urgent is None,
+    "q" or "e"; pending is a list of other lines typed meanwhile.
+
+    No explicit process timeout here: every real caller's cmd is already
+    wrapped in the external `timeout` utility, which enforces the real
+    limit by killing the child - that just shows up here as proc.stdout
+    hitting EOF like any other process exit.
+    """
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             stdin=subprocess.DEVNULL, text=True, bufsize=1)
+    saw_error = False
+    urgent = None
+    pending = []
+    written = os.path.getsize(logfile) if os.path.exists(logfile) else 0
+    with open(logfile, "a") as lf:
+        while True:
+            rlist, _, _ = select.select([proc.stdout, sys.stdin], [], [])
+            if proc.stdout in rlist:
+                line = proc.stdout.readline()
+                if line:
+                    print(f"    {line.rstrip()}")
+                    if "[ERROR]" in line:
+                        saw_error = True
+                    if written < MAX_LOG_BYTES:
+                        written += lf.write(line)
+                elif proc.poll() is not None:
+                    break
+            if sys.stdin in rlist:
+                cmdline = sys.stdin.readline()
+                stripped = cmdline.strip().lower()
+                if stripped in ("!q", "!e"):
+                    urgent = stripped[1]
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                    break
+                elif cmdline.strip():
+                    pending.append(cmdline)
+    return proc.wait(), saw_error, urgent, pending
+
+
+def rip_track(dev, discid, track, logfile):
+    with open(logfile, "a") as lf:
+        lf.write(f"\n=== track {track} ===\n")
+    cmd = ["timeout", "--signal=TERM", "--kill-after=30s", str(PER_TRACK_TIMEOUT),
+           "abcde", "-N", "-c", NOEJECT_CONF, "-d", dev, "-C", discid,
+           "-a", "read,encode,tag,move", str(track)]
+    rc, saw_error, urgent, pending = sh_live(cmd, logfile)
+    ok = rc == 0 and not saw_error
+    if urgent:
+        note = f"track {track} interrupted by '!{urgent}'"
+    elif rc == 124:
+        note = f"track {track} TIMED OUT after {PER_TRACK_TIMEOUT}s"
+    elif not ok:
+        note = f"track {track} failed (rc={rc})"
+    else:
+        note = f"track {track} ripped OK"
+    with open(logfile, "a") as lf:
+        lf.write(f"{note}\n")
+    return ok, note, urgent, pending
+
+
+def rip_session(dev):
+    """Returns True if the disc is fully ripped and can stop being retried,
+    False if it should still be offered for retry (some tracks left)."""
+    os.makedirs(LOGDIR, exist_ok=True)
+    if free_kb(RIPDIR) < 524288:
+        print(f"Only {free_kb(RIPDIR)}KB free at {RIPDIR}, refusing to start.")
+        return True
+
+    # Prune scratch dirs left behind by past sessions that were abandoned
+    # (disc pulled, `q`'d out, or crashed) rather than finished or actively
+    # being retried - a completed disc already removes its own tempdir, and
+    # an in-progress retry is always recent, so anything old here is debris.
+    now = time.time()
+    for d in glob.glob(os.path.join(RIPDIR, "abcde.*")):
+        if os.path.isdir(d) and now - os.path.getmtime(d) > STALE_TEMPDIR_SECS:
+            shutil.rmtree(d, ignore_errors=True)
+
+    stamp = time.strftime("%Y%m%dT%H%M%S")
+    logfile = os.path.join(LOGDIR, f"{stamp}-{DEVNAME}.log")
+
+    print(f"Scraping metadata for {dev}...")
+    rc, out = sh(["abcde", "-N", "-c", NOEJECT_CONF, "-d", dev, "-a", "cddb"], timeout=120)
+    with open(logfile, "w") as lf:
+        lf.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')}: metadata scrape\n")
+        lf.write(out)
+
+    tempdir = newest_abcde_tempdir()
+    if not tempdir:
+        print("Could not find abcde's metadata scratch dir - aborting.")
+        return True
+    discid, artist, album, titles = parse_cddb_metadata(tempdir)
+    if not discid:
+        print("Metadata scrape failed to produce a discid - aborting.")
+        return True
+
+    durations = track_durations(dev)
+    track_nums = sorted(titles.keys()) or sorted(durations.keys())
+    album_dir_guess = album_dir_path(artist, album, discid)
+    already_done = existing_track_numbers(album_dir_guess)
+
+    print(f"\nLooked up: {artist.strip()} - {album.strip()} ({len(track_nums)} tracks)")
+    print_tracklist(track_nums, titles, durations, already_done)
+
+    queue = [n for n in track_nums if n not in already_done]
+    if not queue:
+        print("All tracks already ripped.")
+        return True
+
+    print(f"Ripping now, starting with track {queue[0]}. While it's running you can type "
+          f"(then Enter):")
+    print("  5 2                 - reprioritize remaining tracks (rip 5, then 2, then the rest)")
+    print("  artist=Real Name    - fix the artist (retags any tracks already ripped too)")
+    print("  album=Real Album    - fix the album (same)")
+    print("  3=Real Track Title  - fix track 3's title (retags it if already ripped)")
+    print("  q / !q              - stop after this track / stop this track right now (no eject)")
+    print("  e / !e              - stop after this track / stop this track right now, then eject")
+    print()
+
+    results = []
+    ripped = {}  # track number -> current mp3 path, for retroactive fixes
+    control = None
+    try:
+        while queue:
+            r, _, _ = select.select([sys.stdin], [], [], 0)
+            if r:
+                line = sys.stdin.readline()
+                if line:
+                    artist, album, titles, control = apply_live_input(
+                        line, queue, tempdir, artist, album, titles, ripped, discid)
+                    if control:
+                        break
+            n = queue.pop(0)
+            print(f"  [{n}] {titles.get(n, f'Track {n}')} ...")
+            ok, note, urgent, pending = rip_track(dev, discid, n, logfile)
+            print(f"  [{n}] {titles.get(n, f'Track {n}'):40s} ... {'OK' if ok else 'FAILED'}")
+            results.append((n, ok))
+            if ok:
+                path = find_track_file(album_dir_path(artist, album, discid), n)
+                if path:
+                    ripped[n] = path
+            for pline in pending:
+                artist, album, titles, c2 = apply_live_input(
+                    pline, queue, tempdir, artist, album, titles, ripped, discid)
+                control = control or c2
+            if urgent:
+                control = control or ("stop" if urgent == "q" else "eject")
+            if control:
+                break
+    except KeyboardInterrupt:
+        control = "stop"
+
+    done = sum(1 for _, ok in results if ok)
+    attempted = len(results)
+
+    if control == "stop":
+        print(f"\nStopped - {done}/{attempted} attempted tracks ripped, disc left in drive for retry.")
+        with open(logfile, "a") as lf:
+            lf.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')}: stopped by user, "
+                      f"{done}/{attempted} attempted tracks ripped, disc left in drive\n")
+        return False
+
+    if control == "eject":
+        print(f"\nStopping and ejecting - {done}/{attempted} attempted tracks ripped.")
+        with open(logfile, "a") as lf:
+            lf.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')}: user requested eject, "
+                      f"{done}/{attempted} attempted tracks ripped, ejecting\n")
+        sh(["eject", dev])
+        print("Ejected.")
+        return True
+
+    ok_count = done
+    all_ok = ok_count == attempted
+    with open(logfile, "a") as lf:
+        lf.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')}: session finished - "
+                  f"{ok_count}/{attempted} tracks ripped"
+                  f"{', ejecting' if all_ok else ', disc left in drive for retry'}\n")
+
+    print(f"\n{ok_count}/{attempted} tracks ripped.")
+    if all_ok:
+        sh(["eject", dev])
+        shutil.rmtree(tempdir, ignore_errors=True)
+        print("All tracks ripped - disc ejected.")
+        return True
+    else:
+        print("Some tracks failed.")
+        return False
+
+
+def history():
+    try:
+        from mutagen.easyid3 import EasyID3
+        from mutagen.mp3 import MP3
+    except ImportError:
+        print("mutagen not available - can't read tags for history view.")
+        return
+
+    albums = {}
+    for root, dirs, files in os.walk(RIPDIR):
+        dirs[:] = [d for d in dirs if d != ".logs" and not d.startswith("abcde.")]
+        for name in files:
+            if not name.lower().endswith(".mp3"):
+                continue
+            path = os.path.join(root, name)
+            try:
+                tags = EasyID3(path)
+            except Exception:
+                continue
+            artist = (tags.get("artist") or ["Unknown Artist"])[0]
+            album = (tags.get("album") or ["Unknown Album"])[0]
+            title = (tags.get("title") or [name])[0]
+            track = (tags.get("tracknumber") or ["0"])[0].split("/")[0]
+            try:
+                track = int(track)
+            except ValueError:
+                track = 0
+            mtime = os.path.getmtime(path)
+            albums.setdefault((artist, album), []).append((track, title, mtime))
+
+    if albums:
+        print("\n=== Ripped albums ===")
+        for (artist, album), tracks in sorted(albums.items(), key=lambda kv: -max(t[2] for t in kv[1])):
+            tracks.sort()
+            when = time.strftime("%Y-%m-%d %H:%M", time.localtime(max(t[2] for t in tracks)))
+            print(f"\n{artist} - {album}  ({len(tracks)} tracks, last ripped {when})")
+            for track, title, _ in tracks:
+                print(f"    {track:2d}. {title}")
+    else:
+        print("\nNo ripped albums found yet.")
+
+    if os.path.isdir(LOGDIR):
+        logs = sorted(glob.glob(os.path.join(LOGDIR, "*.log")), key=os.path.getmtime, reverse=True)[:8]
+        if logs:
+            print("\n=== Recent rip sessions ===")
+            for path in logs:
+                with open(path, "r", errors="replace") as f:
+                    lines = [l.strip() for l in f if l.strip()]
+                summary = lines[-1] if lines else "(empty)"
+                print(f"  {os.path.basename(path)}: {summary}")
+
+
+def status():
+    props = udev_props(DEV)
+    present = props.get("ID_CDROM_MEDIA") == "1"
+    tracks = props.get("ID_CDROM_MEDIA_TRACK_COUNT_AUDIO", "0")
+    print(f"\nDevice: {DEV}")
+    print(f"Disc present: {'yes' if present else 'no'}" + (f" ({tracks} audio tracks)" if present else ""))
+    busy = os.path.exists(LOCKFILE) and not Lock(LOCKFILE).acquire()
+    print(f"Rip in progress: {'yes' if busy else 'no'}")
+
+
+def main():
+    print(f"wtul-rip watching {DEV}. Press 'h' for history, 's' for status, "
+          f"'fix <discid>' to relabel a past disc, 'q' to quit.\n")
+    last_seen_empty = True
+    while True:
+        r, _, _ = select.select([sys.stdin], [], [], POLL_SECS)
+        if r:
+            cmd = sys.stdin.readline().strip()
+            low = cmd.lower()
+            if low in ("q", "!q"):
+                return
+            elif low == "h":
+                history()
+            elif low == "s":
+                status()
+            elif low.startswith("fix "):
+                fix_by_discid(cmd.split(None, 1)[1].strip())
+            continue
+
+        n = disc_audio_track_count(DEV)
+        if n <= 0:
+            last_seen_empty = True
+            continue
+        if not last_seen_empty:
+            continue
+        last_seen_empty = False
+
+        lock = Lock(LOCKFILE)
+        if not lock.acquire():
+            print("Another rip is already in progress on this device, skipping.")
+            continue
+        try:
+            done = rip_session(DEV)
+            # A disc that didn't fully rip stays in the drive - keep offering
+            # to retry the remaining tracks rather than silently ignoring it
+            # (which is what would happen if we just went back to polling,
+            # since the disc never leaves and never re-triggers).
+            while not done:
+                choice = input(
+                    "\nDisc left in drive. Press Enter to retry the remaining "
+                    "tracks, or 'q' to give up on this disc: "
+                ).strip().lower()
+                if choice == "q":
+                    break
+                done = rip_session(DEV)
+        except KeyboardInterrupt:
+            print()
+        finally:
+            lock.release()
+        print(f"\nwatching {DEV}. Press 'h' for history, 's' for status, 'q' to quit.\n")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print()

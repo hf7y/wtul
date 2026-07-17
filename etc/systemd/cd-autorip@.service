@@ -1,0 +1,12 @@
+[Unit]
+Description=Auto-rip audio CD in /dev/%i
+After=sound.target
+
+[Service]
+Type=oneshot
+User=zach
+Environment=HOME=/home/zach
+WorkingDirectory=/home/zach/Music/ripped
+ExecStart=/usr/local/bin/cd-autorip.sh %i
+# A full album rip can take several minutes; don't let systemd time it out.
+TimeoutStartSec=0
