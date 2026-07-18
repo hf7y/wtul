@@ -90,6 +90,17 @@ Needs before starting:
 
 ## 6. Monitor and improve ripping speed
 
+**Status (2026-07-18, branch `rip-speed-monitoring`):** first pass shipped.
+`wtul-rip speed` (and interactive `speed`) parses the extraction-speed
+multiplier out of the cdparanoia progress lines in `~/Music/ripped/.logs/`
+and reports per-session/overall medians, flags tracks under half the median,
+and warns when the newest session collapses vs. earlier ones (degradation
+hint). A live `(read speed N.Nx)` line now prints at the end of each track.
+Parsing/reporting is unit-tested against real logs (`tests/test_speed.py`),
+but the live per-track print only fires during a real rip and still needs
+hands-on hardware verification. Still deferred from the original idea: the
+software-side `LAMEOPTS` tuning (needs a real before/after rip to measure).
+
 Idea: surface actual rip throughput (cdparanoia reports an extraction
 speed multiplier, e.g. "4.2x") so slow rips are visible instead of just
 "it's taking a while," and use that to decide whether the bottleneck is

@@ -28,6 +28,20 @@ PER_TRACK_TIMEOUT = 900       # 15 min/track cap - a bad drive can't hang foreve
 MAX_LOG_BYTES = 5_000_000     # matches the old wrapper's runaway-log cap
 POLL_SECS = 2                 # how often we check the drive while idle
 STALE_TEMPDIR_SECS = 6 * 3600 # abandoned rip scratch dirs older than this get pruned
+SLOW_SPEED_FRACTION = 0.5     # a track under this fraction of the overall median gets flagged as slow
+
+# cdparanoia prints a progress table while reading; the 4th |-delimited
+# column is a running extraction-speed multiplier, e.g. "|   21.912x|".
+# It's a running average that converges over the track, so the last
+# non-zero sample is the track's effective read speed.
+SPEED_RE = re.compile(r"\|\s*([\d.]+)x\|")
+# eyeD3/abcde prints the finished file size, e.g. ".../track6.mp3[ 3.68 MB ]".
+SIZE_RE = re.compile(r"\.mp3\[\s*([\d.]+)\s*MB\s*\]")
+# rip_track writes "=== track N ===" before each track and a one-line note after.
+TRACK_MARK_RE = re.compile(r"^=== track (\d+) ===")
+NOTE_RE = re.compile(r"^track (\d+) (ripped OK|failed|TIMED OUT|interrupted)")
+NOTE_STATUS = {"ripped OK": "ok", "failed": "failed",
+               "TIMED OUT": "timeout", "interrupted": "interrupted"}
 
 
 def sh(cmd, timeout=None):
@@ -369,8 +383,10 @@ def sh_live(cmd, logfile):
     returned for the normal between-track handling in rip_session(),
     since it's not urgent enough to interrupt anything.
 
-    Returns (returncode, saw_error, urgent, pending) - urgent is None,
-    "q" or "e"; pending is a list of other lines typed meanwhile.
+    Returns (returncode, saw_error, urgent, pending, last_speed) - urgent is
+    None, "q" or "e"; pending is a list of other lines typed meanwhile;
+    last_speed is the final non-zero cdparanoia extraction-speed multiplier
+    seen this run (float), or None if the output carried no speed samples.
 
     No explicit process timeout here: every real caller's cmd is already
     wrapped in the external `timeout` utility, which enforces the real
@@ -382,6 +398,7 @@ def sh_live(cmd, logfile):
     saw_error = False
     urgent = None
     pending = []
+    last_speed = None
     written = os.path.getsize(logfile) if os.path.exists(logfile) else 0
     with open(logfile, "a") as lf:
         while True:
@@ -392,6 +409,11 @@ def sh_live(cmd, logfile):
                     print(f"    {line.rstrip()}")
                     if "[ERROR]" in line:
                         saw_error = True
+                    sm = None
+                    for sm in SPEED_RE.finditer(line):
+                        pass
+                    if sm and float(sm.group(1)) > 0:
+                        last_speed = float(sm.group(1))
                     if written < MAX_LOG_BYTES:
                         written += lf.write(line)
                 elif proc.poll() is not None:
@@ -409,7 +431,7 @@ def sh_live(cmd, logfile):
                     break
                 elif cmdline.strip():
                     pending.append(cmdline)
-    return proc.wait(), saw_error, urgent, pending
+    return proc.wait(), saw_error, urgent, pending, last_speed
 
 
 def rip_track(dev, discid, track, logfile):
@@ -418,7 +440,7 @@ def rip_track(dev, discid, track, logfile):
     cmd = ["timeout", "--signal=TERM", "--kill-after=30s", str(PER_TRACK_TIMEOUT),
            "abcde", "-N", "-c", NOEJECT_CONF, "-d", dev, "-C", discid,
            "-a", "read,encode,tag,move", str(track)]
-    rc, saw_error, urgent, pending = sh_live(cmd, logfile)
+    rc, saw_error, urgent, pending, last_speed = sh_live(cmd, logfile)
     ok = rc == 0 and not saw_error
     if urgent:
         note = f"track {track} interrupted by '!{urgent}'"
@@ -430,6 +452,8 @@ def rip_track(dev, discid, track, logfile):
         note = f"track {track} ripped OK"
     with open(logfile, "a") as lf:
         lf.write(f"{note}\n")
+    if ok and last_speed:
+        print(f"    (read speed {last_speed:.1f}x)")
     return ok, note, urgent, pending
 
 
@@ -561,6 +585,139 @@ def rip_session(dev):
         return False
 
 
+def parse_rip_speeds(text):
+    """Parse one rip-session log's text into per-track speed records.
+
+    Pure text -> list of dicts, one per "=== track N ===" section, each:
+      track      - track number (int)
+      final      - last non-zero extraction-speed multiplier seen (float or None)
+      peak       - highest multiplier seen (float or None)
+      samples    - how many progress samples were seen
+      size_mb    - finished mp3 size in MB (float or None)
+      status     - 'ok' | 'failed' | 'timeout' | 'interrupted' | 'unknown'
+
+    Everything is recovered from the raw log lines abcde/cdparanoia already
+    write, so this works retroactively on any log ever produced - no separate
+    stats store to keep in sync. A section with no note line (e.g. the log was
+    truncated mid-rip) is reported as 'unknown' rather than dropped.
+    """
+    records = []
+    cur = None
+
+    def flush():
+        if cur is not None:
+            records.append(cur)
+
+    for line in text.splitlines():
+        m = TRACK_MARK_RE.match(line)
+        if m:
+            flush()
+            cur = {"track": int(m.group(1)), "final": None, "peak": None,
+                   "samples": 0, "size_mb": None, "status": "unknown"}
+            continue
+        if cur is None:
+            continue
+        for sm in SPEED_RE.finditer(line):
+            val = float(sm.group(1))
+            cur["samples"] += 1
+            if val > 0:
+                cur["final"] = val
+                if cur["peak"] is None or val > cur["peak"]:
+                    cur["peak"] = val
+        zm = SIZE_RE.search(line)
+        if zm:
+            cur["size_mb"] = float(zm.group(1))
+        nm = NOTE_RE.match(line)
+        if nm and nm.group(1) == str(cur["track"]):
+            cur["status"] = NOTE_STATUS.get(nm.group(2), "unknown")
+    flush()
+    return records
+
+
+def _median(vals):
+    s = sorted(vals)
+    n = len(s)
+    if n == 0:
+        return None
+    mid = n // 2
+    return s[mid] if n % 2 else (s[mid - 1] + s[mid]) / 2
+
+
+def format_speed_report(sessions):
+    """sessions: list of (name, records) in chronological order. Returns a
+    printable multi-line string summarizing extraction speed per session,
+    the overall median, and any tracks that ripped notably slow."""
+    ok_speeds = [r["final"] for _, recs in sessions for r in recs
+                 if r["status"] == "ok" and r["final"] is not None]
+    if not ok_speeds:
+        return "No extraction-speed data found in the rip logs yet."
+
+    overall = _median(ok_speeds)
+    slow_cut = overall * SLOW_SPEED_FRACTION
+    out = ["=== Rip extraction speed ==="]
+    out.append(f"{len(ok_speeds)} tracks with speed data across {len(sessions)} session(s); "
+               f"overall median {overall:.1f}x (min {min(ok_speeds):.1f}x, max {max(ok_speeds):.1f}x)")
+
+    slow = []
+    session_medians = []
+    for name, recs in sessions:
+        speeds = [r["final"] for r in recs if r["status"] == "ok" and r["final"] is not None]
+        if not speeds:
+            continue
+        med = _median(speeds)
+        session_medians.append((name, med))
+        out.append(f"  {name}: {len(speeds)} track(s), median {med:.1f}x "
+                   f"(min {min(speeds):.1f}x)")
+        for r in recs:
+            if r["status"] == "ok" and r["final"] is not None and r["final"] < slow_cut:
+                slow.append((name, r["track"], r["final"]))
+
+    if slow:
+        out.append("")
+        out.append(f"Slow tracks (< {SLOW_SPEED_FRACTION:.0%} of median = {slow_cut:.1f}x):")
+        for name, track, sp in slow:
+            out.append(f"  {name} track {track}: {sp:.1f}x")
+
+    # Degradation hint: is the most recent session meaningfully slower than
+    # the historical median of earlier sessions? Only claim it with >=2 sessions.
+    if len(session_medians) >= 2:
+        recent_name, recent_med = session_medians[-1]
+        earlier = [m for _, m in session_medians[:-1]]
+        base = _median(earlier)
+        if base and recent_med < base * SLOW_SPEED_FRACTION:
+            out.append("")
+            out.append(f"NOTE: newest session ({recent_name}) median {recent_med:.1f}x is well "
+                       f"below the earlier-session median {base:.1f}x - possible drive/media "
+                       f"degradation worth a hardware check.")
+    return "\n".join(out)
+
+
+def load_speed_sessions(logdir):
+    """Read every rip log under logdir, parse each, and return
+    [(name, records), ...] sorted chronologically by filename time."""
+    sessions = []
+    for path in sorted(glob.glob(os.path.join(logdir, "*.log")), key=os.path.getmtime):
+        try:
+            with open(path, "r", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            continue
+        recs = parse_rip_speeds(text)
+        if recs:
+            sessions.append((os.path.basename(path), recs))
+    return sessions
+
+
+def speed_report():
+    if not os.path.isdir(LOGDIR):
+        print("No rip logs yet - nothing to report on.")
+        return
+    sessions = load_speed_sessions(LOGDIR)
+    print()
+    print(format_speed_report(sessions))
+    print()
+
+
 def history():
     try:
         from mutagen.easyid3 import EasyID3
@@ -625,7 +782,8 @@ def status():
 
 def main():
     print(f"wtul-rip watching {DEV}. Press 'h' for history, 's' for status, "
-          f"'fix <discid>' to relabel a past disc, 'q' to quit.\n")
+          f"'speed' for rip-speed stats, 'fix <discid>' to relabel a past disc, "
+          f"'q' to quit.\n")
     last_seen_empty = True
     while True:
         r, _, _ = select.select([sys.stdin], [], [], POLL_SECS)
@@ -638,6 +796,8 @@ def main():
                 history()
             elif low == "s":
                 status()
+            elif low == "speed":
+                speed_report()
             elif low.startswith("fix "):
                 fix_by_discid(cmd.split(None, 1)[1].strip())
             continue
@@ -672,10 +832,16 @@ def main():
             print()
         finally:
             lock.release()
-        print(f"\nwatching {DEV}. Press 'h' for history, 's' for status, 'q' to quit.\n")
+        print(f"\nwatching {DEV}. Press 'h' for history, 's' for status, "
+              f"'speed' for rip-speed stats, 'q' to quit.\n")
 
 
 if __name__ == "__main__":
+    # `wtul-rip speed` prints the extraction-speed report from past logs and
+    # exits - a read-only view that needs no drive, disc, or watch loop.
+    if len(sys.argv) > 1 and sys.argv[1] == "speed":
+        speed_report()
+        sys.exit(0)
     try:
         main()
     except KeyboardInterrupt:
