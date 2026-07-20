@@ -5,17 +5,22 @@ building, unlike the easy fixes that went straight into `bin/wtul-rip`.
 
 ## 1. Spinitron integration - prioritize already-played tracks
 
-**Status (2026-07-19, branch `spinitron-priority-matching`):** the
-hardware-free core (`lib/spinitron.py`, `tests/test_spinitron.py`) is now
-wired into `rip_session()` in `bin/wtul-rip`: right after the queue is
-built, if the `SPINITRON_API_KEY` env var is set it fetches recent spins,
-matches, and reorders the queue, printing which tracks got prioritized. No
-key set = silent no-op (safe to ship unconfigured); a network/API failure
-at rip time is caught and logged, never aborts the rip. Wiring is covered
-by `tests/test_wiring.py` (env-var gating, module load) but **never run
-against the live Spinitron API** - only the user can supply the station's
-key (flagged in `.claude/QUESTIONS.md`). The 0.82 match threshold is still
-a first guess to tune against real spin data once the key exists.
+**Status (2026-07-20, branch `spinitron-priority-matching`):** done and
+unblocked without the official API. The station's `/api/spins` needs a key
+issued by station management, which turned out not to be obtainable without
+going through them directly - confirmed 2026-07-19. Unblocked instead by
+`fetch_recent_spins_public()` in `lib/spinitron.py`, which scrapes
+`spinitron.com/WTUL/` (the same public, no-login page the WTUL website's
+own "currently playing" widget uses) for the JSON blob embedded in each
+spin's `data-spin` attribute. Wired unconditionally into `rip_session()` in
+`bin/wtul-rip` right after the queue is built - no env var/key needed; a
+network/scrape failure is caught and logged, never aborts the rip. Live-
+verified against the real page 2026-07-20 (see `tests/test_spinitron.py`
+for the parsing tests, `tests/test_wiring.py` for the module-load smoke
+test). The 0.82 match threshold is still a first guess - worth tuning once
+a real rip has run through it a few times. `fetch_recent_spins(api_key,
+...)` (the official API client) is left in place unused, in case the
+station ever does grant a key.
 
 Idea: check a disc's tracks against Spinitron's play history for the
 station; if a track was already logged as played on air, prioritize
@@ -23,9 +28,8 @@ ripping it first (same mechanism as the manual `5 2` live-priority
 command, just auto-populated instead of typed).
 
 Needs before starting:
-- Station's Spinitron API key + station ID (Settings > API in Spinitron).
-- Spinitron's public read API is documented at `developer.spinitron.com` -
-  `GET /api/spins` returns play history with artist/song/release fields.
+- ~~Station's Spinitron API key + station ID~~ - not needed; see Status
+  above.
 - Matching strategy: fuzzy artist+title match between Spinitron spins and
   the CDDB/MusicBrainz-scraped tracklist (exact string match will miss
   punctuation/case differences - probably want something like

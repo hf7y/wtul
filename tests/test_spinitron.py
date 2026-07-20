@@ -8,6 +8,7 @@ Run with:  python3 -m pytest tests/ -q
 """
 import importlib.util
 import os
+from unittest.mock import patch
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _MODPATH = os.path.join(_HERE, "..", "lib", "spinitron.py")
@@ -81,3 +82,39 @@ def test_reorder_returns_new_list():
     out = sp.reorder_queue(q, {3})
     assert out == [3, 1, 2]
     assert q == [1, 2, 3]   # input untouched
+
+
+# Real markup captured from https://spinitron.com/WTUL/ (2026-07-20) -
+# entity-escaped JSON in a data-spin attribute per <tr class="spin-item">.
+_SAMPLE_PAGE = '''
+<tr id="sp-454388786" class="spin-item" data-spin="{&quot;i&quot;:&quot;DENR91561009&quot;,&quot;a&quot;:&quot;The Green Arrows&quot;,&quot;s&quot;:&quot;No Delay - Bullitt&quot;,&quot;r&quot;:&quot;4-Track Recording Session&quot;}" data-key="454388786">...</tr>
+<tr id="sp-454388759" class="spin-item" data-spin="{&quot;i&quot;:&quot;QZNWY2568074&quot;,&quot;a&quot;:&quot;My Neptune&quot;,&quot;s&quot;:&quot;Buckle Up&quot;,&quot;r&quot;:&quot;Despina&quot;}" data-key="454388759">...</tr>
+'''
+
+
+class _FakeResponse:
+    def __init__(self, body):
+        self._body = body.encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return self._body
+
+
+def test_fetch_recent_spins_public_parses_data_spin_attrs():
+    with patch.object(sp.urllib.request, "urlopen", return_value=_FakeResponse(_SAMPLE_PAGE)):
+        spins = sp.fetch_recent_spins_public()
+    assert spins == [
+        {"artist": "The Green Arrows", "song": "No Delay - Bullitt"},
+        {"artist": "My Neptune", "song": "Buckle Up"},
+    ]
+
+
+def test_fetch_recent_spins_public_no_spins_on_page():
+    with patch.object(sp.urllib.request, "urlopen", return_value=_FakeResponse("<html></html>")):
+        assert sp.fetch_recent_spins_public() == []
