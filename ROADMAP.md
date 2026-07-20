@@ -215,24 +215,37 @@ Needs before starting:
 
 **Decision (2026-07-20): the sheet lives
 [here](https://docs.google.com/spreadsheets/d/19QfbBhZpTJZYFuTkWuerD73z3AN_tGl3n8t5cq3dwKI/edit?gid=591596929#gid=591596929)**
-(Google Sheets - different sheet than #4's photo-capture one). Google
-Sheets API + OAuth is now the settled integration path. Per the pipeline
-vision above, this is also where a newly-burned/labeled curated mix (the
-end of the capture→curate→burn→label→rotation loop) gets logged back in
-as a rotation item, not just per-disc catalog rows from `wtul-rip` itself
-- worth reading the existing column schema (needed below) with both use
-cases in mind before locking in a row shape.
+(Google Sheets - different sheet than #4's photo-capture one).
+
+**Integration path revised (2026-07-20): no OAuth/service account** - too
+much Cloud Console ceremony for what this needs. Same pattern as #4 and
+the scheduler's `INTAKE.md` contract instead: a small Apps Script bound
+directly to the sheet, deployed as a web app, `wtul-rip` just POSTs JSON
+to it. Script written and checked in at `gas/catalog-writeback.gs.js` -
+reads the sheet's own header row and matches incoming JSON keys to
+columns by name (case-insensitive), so it needs no hardcoded schema and
+tolerates the sheet's columns changing later. `GET ?scope=schema` returns
+the real header list (so this project learns the columns instead of
+guessing); `GET ?scope=rows&limit=N` re-reads recent rows to confirm a
+POST actually landed (same "never trust the raw POST response" gotcha
+`INTAKE.md` documents). **Waiting on**: user to paste the script into the
+sheet's Extensions > Apps Script, deploy it, and send back the `/exec`
+URL - once that lands this item is fully unblocked and buildable.
+Per the pipeline vision above, this is also where a newly-burned/labeled
+curated mix (the end of the capture→curate→burn→label→rotation loop) gets
+logged back in as a rotation item, not just per-disc catalog rows from
+`wtul-rip` itself - worth designing the row shape with both uses in mind
+once the schema is known via `?scope=schema`.
 
 Idea: there's an existing spreadsheet cataloging the local music
 collection. As `wtul-rip` completes discs, automatically add/update rows
 for what was just ripped instead of that being a separate manual step.
 
 Needs before starting:
-- Read the sheet's actual column schema so new rows match rather than
-  needing a manual reconciliation pass later - not done yet, next step.
-- OAuth/service-account credentials for the Sheets API - not obtained
-  yet (a batch run can generate the request but the actual Google Cloud
-  console step needs the user).
+- The deployed `/exec` URL (see above) - the one remaining human step.
+- Read the sheet's actual column schema via `?scope=schema` once the URL
+  exists, so new rows match rather than needing a manual reconciliation
+  pass later.
 - Whether updates should happen live per-disc (as each rip finishes) or
   as a periodic batch job scanning `~/Music/ripped/` against the sheet.
 
