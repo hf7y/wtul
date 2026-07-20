@@ -9,12 +9,14 @@ the reusable, hardware-free core of that:
     `reorder_queue`) that turns "these spins were played" into "rip these
     track numbers first".
 
-The matching/reorder half is pure and unit-tested. The client half needs the
-station's Spinitron API key + station ID, which only the user can supply, so
-it is NOT yet wired into `wtul-rip`'s rip_session() - see
-`.claude/QUESTIONS.md`. Once the key exists, rip_session() can call
-`fetch_recent_spins(...)` then `reorder_queue(queue, matched_track_numbers(...))`
-right after the metadata scrape, mirroring apply_live_input's reorder.
+The matching/reorder half is pure and unit-tested. `rip_session()` in
+`bin/wtul-rip` calls `fetch_recent_spins(...)` then
+`reorder_queue(queue, matched_track_numbers(...))` right after the queue is
+built, mirroring apply_live_input's reorder - but only if the
+`SPINITRON_API_KEY` env var is set; with no key it's a silent no-op, so this
+is safe to ship without the station's key existing yet. A network/API
+failure at rip time is caught and logged, never aborts the rip. Untested
+against the real API - see `.claude/QUESTIONS.md`.
 """
 import difflib
 import json
