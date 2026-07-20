@@ -15,6 +15,10 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
+import spinitron
 
 DEV = f"/dev/{sys.argv[1]}" if len(sys.argv) > 1 else "/dev/sr0"
 DEVNAME = os.path.basename(DEV)
@@ -480,6 +484,18 @@ def rip_session(dev):
     if not queue:
         print("All tracks already ripped.")
         return True
+
+    try:
+        spins = spinitron.fetch_recent_spins_public()
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        print(f"Spinitron lookup failed ({e}), leaving track order as scraped.")
+    else:
+        matched = spinitron.matched_track_numbers(titles, artist, spins)
+        reordered = spinitron.reorder_queue(queue, matched)
+        if reordered != queue:
+            queue[:] = reordered
+            print(f"Spinitron: {len(matched)} track(s) already played on air, "
+                  f"prioritized: {', '.join(str(n) for n in queue if n in matched)}")
 
     print(f"Ripping now, starting with track {queue[0]}. While it's running you can type "
           f"(then Enter):")
