@@ -27,3 +27,16 @@ def test_spinitron_module_importable_from_wtul_rip(monkeypatch):
     assert hasattr(mod.spinitron, "fetch_recent_spins_public")
     assert hasattr(mod.spinitron, "reorder_queue")
     assert hasattr(mod.spinitron, "matched_track_numbers")
+
+
+def test_metadata_lookup_module_importable_from_wtul_rip(monkeypatch):
+    mod = _load_wtul_rip(monkeypatch)
+    assert hasattr(mod.metadata_lookup, "resolve_disc_metadata")
+
+
+def test_acoustid_key_env_var_picked_up(monkeypatch):
+    monkeypatch.setenv("ACOUSTID_API_KEY", "  test-key  ")
+    monkeypatch.delenv("DISCOGS_TOKEN", raising=False)
+    mod = _load_wtul_rip(monkeypatch)
+    assert mod.ACOUSTID_API_KEY == "test-key"
+    assert mod.DISCOGS_TOKEN == ""

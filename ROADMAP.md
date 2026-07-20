@@ -67,26 +67,43 @@ Needs before starting:
 
 ## 2. External API to fix metadata on already-ripped unidentified discs
 
-**Decision (2026-07-20):** no preference between AcoustID and Discogs, so
-do both - AcoustID/Chromaprint first (identifies from actual audio
-content, better odds on a disc that already failed CDDB/MusicBrainz TOC
-lookup), fall back to Discogs release search if AcoustID comes back empty
-or low-confidence. Ready to build.
+**Status (2026-07-20): built and wired, partially live.** AcoustID key
+obtained (app "Local Show") and stored at `~/.config/wtul/secrets.env`
+(gitignored-by-location, never committed - `bin/wtul-rip` loads it at
+startup via `os.environ.setdefault`, real env vars still win). Discogs
+token not obtained yet - the fallback path is built and tested but a
+silent no-op until `DISCOGS_TOKEN` exists, same pattern as the AcoustID
+key itself would've been.
+
+`lib/metadata_lookup.py` (new, 15 unit tests, all mocked - no real
+network/audio) fingerprints each ripped track with `fpcalc`, queries
+AcoustID, takes a majority vote across tracks for the album (and
+separately for the artist, since a disc can have artist consensus
+without any single track carrying a releasegroup title), then falls back
+to a Discogs artist-catalog search if AcoustID found an artist but not a
+confident album. `fix_by_discid()` in `bin/wtul-rip` now runs this before
+its manual prompt and offers the result as a suggestion (blank input
+accepts it) rather than auto-applying it - fuzzy matching stays
+confirm/edit, never blind, same principle #7 later calls for on OCR
+output.
+
+**Not yet live-verified**: `fpcalc` (Chromaprint) still isn't installed
+on this machine - asked the user to run
+`sudo apt install -y libchromaprint-tools` (needs an interactive sudo
+prompt this session couldn't provide). Until then `resolve_disc_metadata`
+degrades to its safe no-op (falls straight through to the existing
+manual prompt), same as before this session's work.
 
 Idea: extend the `fix <discid>` command so it can look up the correct
 metadata automatically instead of only accepting manual artist/album entry.
 
 Needs before starting:
-- `fpcalc` (Chromaprint) installed on this machine - not yet done.
-- An AcoustID API key (free, self-serve at acoustid.org) and a Discogs
-  personal access token (self-serve too) - neither obtained yet; both are
-  the kind of key a batch run can prompt for but not fetch itself.
+- ~~`fpcalc` (Chromaprint) installed~~ - still pending, see Status above.
+- ~~AcoustID API key~~ - obtained, see Status above.
+- A Discogs personal access token (self-serve at discogs.com) - not
+  obtained yet; the fallback path is ready and waiting on it.
 - Rate limits for both - check before hammering either on a whole backlog
-  of unidentified discs at once.
-- Reuse `fix_by_discid()`'s retag/move logic once a name is found from
-  either source - only the "ask the user" step gets replaced with
-  AcoustID-then-Discogs, and only falls through to the manual prompt if
-  both come back empty.
+  of unidentified discs at once (not yet exercised against real volume).
 
 ## 3. Label printer integration - seamless tagging
 

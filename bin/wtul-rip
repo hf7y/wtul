@@ -19,6 +19,26 @@ import urllib.error
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
 import spinitron
+import metadata_lookup
+
+
+def _load_secrets_env(path):
+    """KEY=VALUE lines from a gitignored local file (never committed) into
+    os.environ, without overriding a real env var already set. Lets
+    secrets like ACOUSTID_API_KEY persist across shells without editing
+    a shell profile."""
+    if not os.path.isfile(path):
+        return
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(), val.strip())
+
+
+_load_secrets_env(os.path.join(os.path.expanduser("~"), ".config", "wtul", "secrets.env"))
 
 DEV = f"/dev/{sys.argv[1]}" if len(sys.argv) > 1 else "/dev/sr0"
 DEVNAME = os.path.basename(DEV)
@@ -27,6 +47,8 @@ RIPDIR = os.path.join(HOME, "Music", "ripped")
 LOGDIR = os.path.join(RIPDIR, ".logs")
 LOCKFILE = f"/tmp/cd-autorip-{DEVNAME}.lock"
 NOEJECT_CONF = os.path.join(HOME, ".abcde-noeject.conf")
+ACOUSTID_API_KEY = os.environ.get("ACOUSTID_API_KEY", "").strip()
+DISCOGS_TOKEN = os.environ.get("DISCOGS_TOKEN", "").strip()
 
 PER_TRACK_TIMEOUT = 900       # 15 min/track cap - a bad drive can't hang forever
 MAX_LOG_BYTES = 5_000_000     # matches the old wrapper's runaway-log cap
@@ -288,8 +310,28 @@ def fix_by_discid(discid):
         return
     old_dir = matches[0]
     print(f"Found: {old_dir}")
-    new_artist = input("New artist (blank to keep 'Unknown Artist'): ").strip() or "Unknown Artist"
-    new_album = input("New album (blank to keep current): ").strip()
+
+    suggested_artist, suggested_album = None, None
+    if ACOUSTID_API_KEY:
+        track_paths = sorted(
+            os.path.join(old_dir, n) for n in os.listdir(old_dir) if n.lower().endswith(".mp3")
+        )
+        if track_paths:
+            print("Trying AcoustID (+ Discogs fallback) on the ripped audio...")
+            suggested_artist, suggested_album = metadata_lookup.resolve_disc_metadata(
+                track_paths, acoustid_key=ACOUSTID_API_KEY, discogs_token=DISCOGS_TOKEN or None)
+            if suggested_artist or suggested_album:
+                print(f"  -> suggestion: {suggested_artist or '?'} - {suggested_album or '?'} "
+                      f"(unverified match, confirm or edit below)")
+            else:
+                print("  -> no confident match, falling back to manual entry.")
+
+    artist_prompt = f"New artist (blank to use suggestion '{suggested_artist}'" \
+        if suggested_artist else "New artist (blank to keep 'Unknown Artist'"
+    new_artist = input(f"{artist_prompt}): ").strip() or suggested_artist or "Unknown Artist"
+    album_prompt = f"New album (blank to use suggestion '{suggested_album}'" \
+        if suggested_album else "New album (blank to keep current"
+    new_album = input(f"{album_prompt}): ").strip() or suggested_album
     if not new_album:
         print("No album given, leaving as-is.")
         return
