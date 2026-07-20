@@ -230,41 +230,44 @@ Needs before starting:
 
 ## 8. Auto-update the local music catalog spreadsheet
 
-**Decision (2026-07-20): the sheet lives
-[here](https://docs.google.com/spreadsheets/d/19QfbBhZpTJZYFuTkWuerD73z3AN_tGl3n8t5cq3dwKI/edit?gid=591596929#gid=591596929)**
-(Google Sheets - different sheet than #4's photo-capture one).
+**Status (2026-07-20): done and live-verified.** The sheet is
+[here](https://docs.google.com/spreadsheets/d/19QfbBhZpTJZYFuTkWuerD73z3AN_tGl3n8t5cq3dwKI/edit?gid=591596929#gid=591596929)
+(Google Sheets - different sheet than #4's photo-capture one) - real
+schema turned out to be the **"LOCAL"** tab (of three: LOCAL, Closers,
+SWEEPERS/PROMOS/BUMPS), with a title row ("LOCAL CDS") before the real
+header row: `#, ARTIST, ALBUM, LABEL, YEAR, Rating, GENRE, MERIT, LOCAL,
+COMMENT, DATE, DJ NAME, HOME`.
 
-**Integration path revised (2026-07-20): no OAuth/service account** - too
-much Cloud Console ceremony for what this needs. Same pattern as #4 and
-the scheduler's `INTAKE.md` contract instead: a small Apps Script bound
-directly to the sheet, deployed as a web app, `wtul-rip` just POSTs JSON
-to it. Script written and checked in at `gas/catalog-writeback.gs.js` -
-reads the sheet's own header row and matches incoming JSON keys to
-columns by name (case-insensitive), so it needs no hardcoded schema and
-tolerates the sheet's columns changing later. `GET ?scope=schema` returns
-the real header list (so this project learns the columns instead of
-guessing); `GET ?scope=rows&limit=N` re-reads recent rows to confirm a
-POST actually landed (same "never trust the raw POST response" gotcha
-`INTAKE.md` documents). **Waiting on**: user to paste the script into the
-sheet's Extensions > Apps Script, deploy it, and send back the `/exec`
-URL - once that lands this item is fully unblocked and buildable.
+No OAuth/service account, per #4's pattern and the scheduler's
+`INTAKE.md` contract: `gas/catalog-writeback.gs.js`, an Apps Script bound
+to the sheet, deployed as a web app. It auto-detects the header row
+(picks whichever of the first few rows has the most non-empty cells, so
+a title row above the real headers doesn't break it) and matches
+incoming JSON keys to columns by name - no hardcoded schema.
+`lib/catalog_writeback.py` (7 unit tests) is the Python side:
+`rip_session()` in `bin/wtul-rip` POSTs `{ARTIST, ALBUM, DATE, LOCAL:
+true}` once a disc finishes ripping completely (not on a partial/failed
+session - a half-ripped album shouldn't hit the rotation catalog).
+
+**Real gotcha hit and fixed**: a live test POST came back as Apps
+Script's own "Page Not Found" redirect HTML, not JSON - exactly the
+documented `INTAKE.md` warning that a POST response against this kind of
+endpoint can't be trusted. `write_row()` doesn't trust it either - it
+POSTs, then re-`GET`s recent rows and checks the ARTIST+ALBUM actually
+landed before reporting success. Live-verified twice against the real
+sheet (test rows added, need deleting by hand - no delete endpoint was
+built, out of scope for now).
+
 Per the pipeline vision above, this is also where a newly-burned/labeled
-curated mix (the end of the capture→curate→burn→label→rotation loop) gets
-logged back in as a rotation item, not just per-disc catalog rows from
-`wtul-rip` itself - worth designing the row shape with both uses in mind
-once the schema is known via `?scope=schema`.
+curated mix (the end of the capture→curate→burn→label→rotation loop)
+would get logged back in as a rotation item, not just per-disc catalog
+rows from `wtul-rip` itself - not built, just noting the row shape
+(`LOCAL: true` plus the rest) would need to change for that use once #9
+exists.
 
 Idea: there's an existing spreadsheet cataloging the local music
 collection. As `wtul-rip` completes discs, automatically add/update rows
 for what was just ripped instead of that being a separate manual step.
-
-Needs before starting:
-- The deployed `/exec` URL (see above) - the one remaining human step.
-- Read the sheet's actual column schema via `?scope=schema` once the URL
-  exists, so new rows match rather than needing a manual reconciliation
-  pass later.
-- Whether updates should happen live per-disc (as each rip finishes) or
-  as a periodic batch job scanning `~/Music/ripped/` against the sheet.
 
 ## 9. Capture-on-play - auto-rip material right after it airs
 

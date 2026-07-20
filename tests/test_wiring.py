@@ -34,6 +34,11 @@ def test_metadata_lookup_module_importable_from_wtul_rip(monkeypatch):
     assert hasattr(mod.metadata_lookup, "resolve_disc_metadata")
 
 
+def test_catalog_writeback_module_importable_from_wtul_rip(monkeypatch):
+    mod = _load_wtul_rip(monkeypatch)
+    assert hasattr(mod.catalog_writeback, "post_row")
+
+
 def test_acoustid_key_env_var_picked_up(monkeypatch):
     monkeypatch.setenv("ACOUSTID_API_KEY", "  test-key  ")
     monkeypatch.delenv("DISCOGS_TOKEN", raising=False)

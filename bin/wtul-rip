@@ -20,6 +20,7 @@ import urllib.error
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
 import spinitron
 import metadata_lookup
+import catalog_writeback
 
 
 def _load_secrets_env(path):
@@ -49,6 +50,7 @@ LOCKFILE = f"/tmp/cd-autorip-{DEVNAME}.lock"
 NOEJECT_CONF = os.path.join(HOME, ".abcde-noeject.conf")
 ACOUSTID_API_KEY = os.environ.get("ACOUSTID_API_KEY", "").strip()
 DISCOGS_TOKEN = os.environ.get("DISCOGS_TOKEN", "").strip()
+CATALOG_WRITEBACK_URL = os.environ.get("CATALOG_WRITEBACK_URL", "").strip()
 
 PER_TRACK_TIMEOUT = 900       # 15 min/track cap - a bad drive can't hang forever
 MAX_LOG_BYTES = 5_000_000     # matches the old wrapper's runaway-log cap
@@ -613,6 +615,18 @@ def rip_session(dev):
         sh(["eject", dev])
         shutil.rmtree(tempdir, ignore_errors=True)
         print("All tracks ripped - disc ejected.")
+        if CATALOG_WRITEBACK_URL:
+            confirmed = catalog_writeback.write_row(CATALOG_WRITEBACK_URL, {
+                "ARTIST": artist.strip(),
+                "ALBUM": album.strip(),
+                "DATE": time.strftime("%Y-%m-%d"),
+                "LOCAL": True,
+            })
+            if confirmed:
+                print("Catalog: logged to sheet.")
+            else:
+                print("Catalog: write-back failed or unreachable, not logged - "
+                      "add it to the sheet by hand if it matters.")
         return True
     else:
         print("Some tracks failed.")
