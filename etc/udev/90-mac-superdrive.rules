@@ -1,0 +1,6 @@
+# Apple USB SuperDrive needs a wake-up SCSI command before it will respond
+# to anything (open tray, report media, etc) - without this it just sits
+# there enumerated but inert. sg_raw (from sg3-utils) sends that command
+# once per plug-in. Known Linux quirk, not a wtul-specific hack; source:
+# https://gist.github.com/AnnoyingTechnology/dbaae864822cf08372f0aafe64a63477
+ACTION=="add", ATTRS{idProduct}=="1500", ATTRS{idVendor}=="05ac", DRIVERS=="usb", RUN+="/usr/bin/sg_raw %r/sr%n EA 00 00 00 00 00 01"

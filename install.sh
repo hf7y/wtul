@@ -16,6 +16,21 @@ if ! command -v eyeD3 >/dev/null; then
     sudo apt-get install -y eyed3
 fi
 
+# sg3-utils' sg_raw is what the Apple USB SuperDrive udev rule below uses to
+# send its required wake-up command - installed unconditionally since it's
+# small and harmless even if you never plug in a SuperDrive.
+if ! command -v sg_raw >/dev/null; then
+    sudo apt-get install -y sg3-utils
+fi
+
+# Apple USB SuperDrive: enumerates but stays inert (no tray, no media
+# events) until it receives a specific SCSI wake-up command. Only needed if
+# you ever use one instead of an internal/other USB drive, but installing
+# the rule unconditionally is harmless - it only fires for that exact
+# vendor/product ID.
+sudo install -m 644 etc/udev/90-mac-superdrive.rules /etc/udev/rules.d/90-mac-superdrive.rules
+sudo udevadm control --reload-rules
+
 sudo install -m 755 bin/cd-autorip.sh /usr/local/bin/cd-autorip.sh
 sudo install -m 755 bin/wtul-rip /usr/local/bin/wtul-rip
 sudo install -m 644 etc/systemd/cd-autorip@.service /etc/systemd/system/cd-autorip@.service
@@ -49,6 +64,12 @@ cat <<'EOF'
 
 Installed. To rip discs:
   wtul-rip
+
+If the drive isn't /dev/sr0 (e.g. a second/external drive, or an Apple
+USB SuperDrive showing up as sr1), pass its name:
+  wtul-rip sr1
+Run `udevadm info -a -n /dev/sr1 | grep KERNEL` (or just `ls /dev/sr*`) to
+find out what the system named it.
 
 It watches /dev/sr0 and, on each disc you insert, looks up its metadata,
 shows you the tracklist, and starts ripping immediately in track order -

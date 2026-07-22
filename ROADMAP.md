@@ -297,3 +297,28 @@ Needs before starting (open questions, not yet answered):
   under `~/Music/`?) and what identifies each capture for later curation
   (Spinitron spin metadata already gives artist/title/timestamp for free
   if #1's data is reused here).
+
+## 10. Show-run sheet / sweeper integration - not designed, flagged not built
+
+**New (2026-07-22)**, surfaced while prepping for a show, deliberately
+**not built this round** (vision-debt guardrail - see realisateur's
+`scheduler_relationship` notes on not building speculative cross-system
+integration same-day): the Friday "Local Show" is run from a Google Sheet
+(slot-numbered rows: `theme`/`sweeper N`/`music`/`psa`/`promo`/`calendar`/
+`closer`, each sweeper row pointing at a pre-recorded Google Drive audio
+clip) - a completely separate system from this repo's CD ripper. The idea
+floated was "light integration" between wtul-rip and that sheet, but
+there's no concrete mechanism yet (what would wtul-rip even do with a
+run-sheet row - cue playback? log what aired? nothing here plays audio
+today, it only rips discs already in hand).
+
+Needs before starting (genuinely undesigned, not just unscheduled):
+- What's the actual pain point the sheet doesn't already solve by itself
+  (currently just read/followed manually during the show)?
+- Would this be wtul-rip logging against the sheet (e.g. writing back
+  which ripped tracks got played, sheet-row style, similar in shape to
+  #8's catalog write-back), or the sheet driving wtul-rip (e.g.
+  auto-queuing a rip when a sheet row says a track should air)? Different
+  directions, not a detail to guess at.
+- Out of scope until one of those directions is picked; the sheet works
+  fine unintegrated in the meantime.
