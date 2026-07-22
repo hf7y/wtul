@@ -17,6 +17,19 @@ branch, flagged in `.claude/QUESTIONS.md` and the report. Only actually
 stop and wait for the user when the action itself can't be reverted --
 an ordinary commit, branch, or report write never qualifies.
 
+## 0a. Pick up the user's replies to `.claude/QUESTIONS.md` first
+
+Before anything else, run
+`"$SCHEDULER_REPO"/bin/collect-feedback.sh .claude/QUESTIONS.md --consume`
+(scheduler repo path: `~/Documents/Project Archive/scheduler`). QUESTIONS.md
+is append-only by convention, so nothing else ever reads back a `> ` reply
+the user left inline -- this step is the one thing that does. For each
+`### REPLY` the script surfaces: act on it (if it resolves/changes/answers
+something) and then delete that question's whole entry from QUESTIONS.md
+per its own stated contract (line ~5) -- `--consume` only strips the reply
+line itself, not the question, so don't skip this. If a reply raises a new
+question of its own, append a fresh entry as usual.
+
 ## 0. The hardware constraint - read this first
 
 This project automates ripping physical CDs via a real optical drive
