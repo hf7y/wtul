@@ -83,3 +83,11 @@ hand.
   needs: polling interval/rate-limit for (1), and a sound mechanism
   choice for (2) (terminal bell vs a real audio file needs an output
   device decision). Not built this round.
+- **2026-07-24 (parked, hardware): eject softkey, since the drive doesn't
+  have a physical eject button.** Surfaced during live testing (`q` got
+  stuck / disc needed manual handling with no way to eject from the
+  drive itself). Idea: a `wtul-rip` command (e.g. `eject`) that shells
+  out to `eject <dev>` so the disc can be ejected from the keyboard
+  instead. Not built - no confirmed need yet beyond this one session,
+  and worth checking `eject` actually works against this drive
+  (SuperDrive quirks already bit us once today) before wiring it in.
