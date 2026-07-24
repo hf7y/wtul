@@ -32,8 +32,18 @@ sudo install -m 644 etc/udev/90-mac-superdrive.rules /etc/udev/rules.d/90-mac-su
 sudo udevadm control --reload-rules
 
 sudo install -m 755 bin/cd-autorip.sh /usr/local/bin/cd-autorip.sh
-sudo install -m 755 bin/wtul-rip /usr/local/bin/wtul-rip
 sudo install -m 644 etc/systemd/cd-autorip@.service /etc/systemd/system/cd-autorip@.service
+
+# wtul-rip imports lib/spinitron.py etc via a path relative to its own
+# location (bin/../lib) - installing just the script to /usr/local/bin
+# breaks that (no lib/ next to /usr/local/bin), so deploy the whole
+# bin+lib tree under one prefix and symlink the entry point onto PATH.
+# wtul-rip resolves symlinks (os.path.realpath) before computing that
+# relative path, so this keeps working through the symlink.
+sudo install -d -m 755 /usr/local/lib/wtul-rip/bin /usr/local/lib/wtul-rip/lib
+sudo install -m 755 bin/wtul-rip /usr/local/lib/wtul-rip/bin/wtul-rip
+sudo install -m 644 lib/*.py /usr/local/lib/wtul-rip/lib/
+sudo ln -sf /usr/local/lib/wtul-rip/bin/wtul-rip /usr/local/bin/wtul-rip
 
 # Remove the old udev auto-trigger if it's still installed from an earlier
 # run of this script - wtul-rip replaces it as the thing that starts a rip.
