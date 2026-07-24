@@ -128,11 +128,26 @@ def newest_abcde_tempdir():
     return max(dirs, key=os.path.getmtime)
 
 
+def find_cddbread(tempdir):
+    """Locate the cddbread.N file abcde writes after a metadata scrape.
+
+    N is the chosen match's 1-based index (e.g. cddbread.1 for the first/only
+    MusicBrainz hit), not always 0 - a disc with exactly one match still
+    landed on cddbread.1 in testing (2026-07-24, "Belong / October
+    Language"), which a hardcoded ".0" silently missed, parsed as no fields
+    at all, and aborted the rip despite a perfectly good scrape sitting
+    right there. Only root-level files match (data-musicbrainz/cddbread.1
+    is a separate copy abcde also writes, not the canonical one)."""
+    candidates = sorted(glob.glob(os.path.join(tempdir, "cddbread.*")))
+    candidates = [c for c in candidates if os.path.isfile(c)]
+    return candidates[0] if candidates else None
+
+
 def parse_cddb_metadata(tempdir):
-    """Read the cddbread.0 abcde writes after a metadata scrape."""
-    path = os.path.join(tempdir, "cddbread.0")
+    """Read the cddbread.N file abcde writes after a metadata scrape."""
+    path = find_cddbread(tempdir)
     fields = {}
-    if os.path.exists(path):
+    if path and os.path.exists(path):
         with open(path, "r", errors="replace") as f:
             for line in f:
                 line = line.rstrip("\n")
@@ -155,12 +170,13 @@ def parse_cddb_metadata(tempdir):
 
 
 def write_cddbread(tempdir, artist, album, titles):
-    """Rewrite cddbread.0 with edited artist/album/track titles so the next
-    per-track abcde invocation (which re-reads this file fresh) tags and
-    names files with the correction instead of the original scrape."""
-    path = os.path.join(tempdir, "cddbread.0")
+    """Rewrite the cddbread.N file with edited artist/album/track titles so
+    the next per-track abcde invocation (which re-reads this file fresh)
+    tags and names files with the correction instead of the original
+    scrape. See find_cddbread for why N isn't always 0."""
+    path = find_cddbread(tempdir)
     lines = []
-    if os.path.exists(path):
+    if path and os.path.exists(path):
         with open(path, "r", errors="replace") as f:
             lines = f.readlines()
     out = []
