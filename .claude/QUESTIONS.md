@@ -69,3 +69,17 @@ hand.
   hardware/manual - no purchase made. Revisit when ready to actually buy;
   this ties into ROADMAP.md's "capture-on-play" pipeline (#9) if relay
   playback becomes the live-source side of that eventually.
+- **2026-07-24 (parked, wtul-rip UX): stream Spinitron spins into the CLI
+  while running; earcon on detection failure.** Two ideas from live
+  hardware testing: (1) `wtul-rip` currently only checks Spinitron once
+  per disc (inside `rip_session()`, best-effort, silent on failure) -
+  streaming/polling spins continuously and printing them live while the
+  tool idles between discs would make the "already played on air" signal
+  visible in real time, not just at rip-queue-build time. (2) an audible
+  earcon (short sound cue) when disc/media detection fails, so a failed
+  auto-rip attempt (e.g. today's "Metadata scrape failed to produce a
+  discid" case, now fixed - see `bin/wtul-rip`'s `find_cddbread`) doesn't
+  go unnoticed if no one's watching the terminal. Neither designed yet -
+  needs: polling interval/rate-limit for (1), and a sound mechanism
+  choice for (2) (terminal bell vs a real audio file needs an output
+  device decision). Not built this round.

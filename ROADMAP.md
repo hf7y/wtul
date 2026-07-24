@@ -361,3 +361,32 @@ Needs before starting (genuinely undesigned, not just unscheduled):
   directions, not a detail to guess at.
 - Out of scope until one of those directions is picked; the sheet works
   fine unintegrated in the meantime.
+
+**Direction picked (2026-07-24, next `/wtul-batch`): a small web UI, sheet
+driving playback prep, not wtul-rip logging.** Idea: a page that reads the
+run-sheet and, for the upcoming `sweeper N` row, pre-loads that row's
+Google Drive audio clip into local cache ahead of when it airs -
+eliminating the on-air lag of a cold fetch/buffer at cue time. Two
+pieces:
+- **Auto-prime**: as the show clock advances (or the sheet's current row
+  advances), automatically cache the *next* upcoming sweeper clip.
+- **Manual prime button**: a button to force-cache a specific sweeper on
+  demand, for cases where auto-prime hasn't caught up yet (jumping ahead
+  in the sheet, re-cueing something already played, etc).
+
+Still needs, before `/wtul-batch` builds anything real:
+- How this web UI reads the sheet - Google Sheets API (read-only,
+  service-account or OAuth?) vs a manually-exported/synced copy. This
+  repo has no Google API wiring today; #8's catalog spreadsheet work may
+  end up sharing this decision, worth deciding once for both rather than
+  twice.
+- What "cache" means concretely - browser cache (fetch + hold in memory/
+  IndexedDB, page must stay open), or a local file fetched to disk so
+  something else (e.g. a media player) can pick it up? Changes the whole
+  shape of "load to cache."
+- Where this runs during the show - same machine as `wtul-rip`, or a
+  separate browser tab/device someone's actually watching live? No
+  hosting/deployment decision made yet.
+- This is new surface area (a web app + Google Sheets read access), not a
+  wtul-rip change - likely its own script/directory rather than bolted
+  onto `bin/wtul-rip`.
