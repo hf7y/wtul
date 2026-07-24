@@ -573,31 +573,39 @@ def rip_session(dev):
     print(f"\nLooked up: {artist.strip()} - {album.strip()} ({len(track_nums)} tracks)")
     print_tracklist(track_nums, titles, durations, already_done)
 
-    queue = [n for n in track_nums if n not in already_done]
-    if not queue:
-        print("All tracks already ripped.")
-        return True
-
+    # Only rip tracks Spinitron confirms have already aired - this station's
+    # workflow (2026-07-24) wants captured audio limited to what's actually
+    # been played on air, not the whole disc. If the lookup itself fails we
+    # can't tell what's been played, so skip rather than guess by ripping
+    # everything.
     try:
         spins = spinitron.fetch_recent_spins_public()
     except (urllib.error.URLError, OSError, ValueError) as e:
-        print(f"Spinitron lookup failed ({e}), leaving track order as scraped.")
-    else:
-        matched = spinitron.matched_track_numbers(titles, artist, spins)
-        reordered = spinitron.reorder_queue(queue, matched)
-        if reordered != queue:
-            queue[:] = reordered
-            print(f"Spinitron: {len(matched)} track(s) already played on air, "
-                  f"prioritized: {', '.join(str(n) for n in queue if n in matched)}")
+        print(f"Spinitron lookup failed ({e}) - can't tell what's aired, skipping this disc. "
+              f"Press 'e' to eject, or leave it for a retry once the lookup is working.")
+        return False
 
-    print(f"Ripping now, starting with track {queue[0]}. While it's running you can type "
-          f"(then Enter):")
+    matched = spinitron.matched_track_numbers(titles, artist, spins)
+    if not matched:
+        print("No tracks on this disc have aired yet per Spinitron - nothing to rip. "
+              "Press 'e' to eject, or leave it for a retry once something's played.")
+        return False
+    queue = [n for n in track_nums if n in matched and n not in already_done]
+    if not queue:
+        print(f"{len(matched)} track(s) have aired per Spinitron but are already ripped - "
+              f"nothing new to rip. Press 'e' to eject, or leave it for a retry.")
+        return False
+
+    print(f"Spinitron: ripping {len(queue)} already-played track(s): "
+          f"{', '.join(str(n) for n in queue)}")
+    print("While it's running you can type (then Enter):")
     print("  5 2                 - reprioritize remaining tracks (rip 5, then 2, then the rest)")
     print("  artist=Real Name    - fix the artist (retags any tracks already ripped too)")
     print("  album=Real Album    - fix the album (same)")
     print("  3=Real Track Title  - fix track 3's title (retags it if already ripped)")
     print("  q / !q              - stop after this track / stop this track right now (no eject)")
     print("  e / !e              - stop after this track / stop this track right now, then eject")
+    print("  (Ctrl+C also interrupts immediately, any time)")
     print()
 
     results = []
@@ -746,7 +754,7 @@ def status():
 
 def main():
     print(f"wtul-rip watching {DEV}. Press 'h' for history, 's' for status, "
-          f"'fix <discid>' to relabel a past disc, 'q' to quit.\n")
+          f"'e' to eject, 'fix <discid>' to relabel a past disc, 'q' to quit.\n")
     last_seen_empty = True
     while True:
         r, _, _ = select.select([sys.stdin], [], [], POLL_SECS)
@@ -759,6 +767,10 @@ def main():
                 history()
             elif low == "s":
                 status()
+            elif low == "e":
+                sh(["eject", DEV])
+                print(f"Ejected {DEV}.")
+                last_seen_empty = True
             elif low.startswith("fix "):
                 fix_by_discid(cmd.split(None, 1)[1].strip())
             continue
@@ -783,10 +795,15 @@ def main():
             # since the disc never leaves and never re-triggers).
             while not done:
                 choice = input(
-                    "\nDisc left in drive. Press Enter to retry the remaining "
-                    "tracks, or 'q' to give up on this disc: "
+                    "\nDisc left in drive. Press Enter to retry (e.g. to "
+                    "recheck Spinitron), 'e' to eject, or 'q' to give up "
+                    "on this disc: "
                 ).strip().lower()
                 if choice == "q":
+                    break
+                if choice == "e":
+                    sh(["eject", DEV])
+                    print(f"Ejected {DEV}.")
                     break
                 done = rip_session(DEV)
         except KeyboardInterrupt:
