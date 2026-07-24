@@ -3,10 +3,7 @@
 
 ## Stability milestone
 
-**Current (2026-07-24, realisateur):** wtul reliably rips a disc
-end-to-end with correct track metadata (Spinitron public-scrape +
-Discogs lookup, both credential-free) and logs it in a form Zach can
-trust without hand-checking — status: in-progress
+**Current:** wtul reliably rips a disc end-to-end with correct track metadata (Spinitron public-scrape + Discogs lookup, both credential-free) and logs it in a form Zach can trust without hand-checking — status: in-progress
 Done when:
 - [x] FOCUS.md/ROADMAP.md reconciliation done (thin pointer above, kept
       2026-07-24)
@@ -21,6 +18,9 @@ front-end (#9), label printer (#3), catalog spreadsheet (#8), web-photo/
 OCR (#4/#7), show-run sheet (#10) — all deeper-integration items still
 needing hardware/design decisions the user hasn't made yet (see
 QUESTIONS.md's 2026-07-18 either/or, parts b/c/d).
+
+*(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
+it doesn't fit wtul's own read of its bar.)*
 
 ## Current focus
 
