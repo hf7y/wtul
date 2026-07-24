@@ -14,10 +14,40 @@ Done when:
 
 Ideas beyond this bar are PARKED by default (see
 realisateur/STABILITY-MILESTONES.md): capture-on-play pipeline
-front-end (#9), label printer (#3), catalog spreadsheet (#8), web-photo/
-OCR (#4/#7), show-run sheet (#10) — all deeper-integration items still
-needing hardware/design decisions the user hasn't made yet (see
-QUESTIONS.md's 2026-07-18 either/or, parts b/c/d).
+front-end (#9), label printer (#3), web-photo/OCR (#4/#7), show-run
+sheet (#10). **Correction (2026-07-24, realisateur):** #8 (catalog
+spreadsheet) was wrongly listed here — it's done, live-verified, and
+already merged to `main` (see ROADMAP.md #8); it isn't past the bar,
+it's finished. #3/#4/#7 aren't waiting on undecided hardware/design
+either anymore (all three were decided 2026-07-20 and built this week)
+— what actually parks them is that they live on unmerged branches that
+have drifted behind `main` (see "Branch health" below), not open
+questions. QUESTIONS.md's 2026-07-18 either/or parts (b)/(c)/(d) were
+reclassified `(parked)` the same day for this reason.
+
+## Branch health (2026-07-24, foundation note for the next dev cycle)
+
+Four feature branches are built but unmerged, and **all four are stale
+— diverged behind `main`** by today's live-test fixes (cddbread.N
+parsing, TOC-discid resume fix, install.sh's lib/ bundling, the
+Unknown-fallback, Spinitron-gating revert, eject soft-key):
+`rip-speed-monitoring` (36 commits behind, ROADMAP #6),
+`label-printer-integration` (13 behind, #3), `web-photo-capture` (13
+behind, #4), `ocr-metadata-extraction` (13 behind, #4/#7, itself
+branched off `web-photo-capture`). Merging any of these as-is would
+silently *reintroduce* today's live-caught bugs — a layer-not-replace
+regression, not a clean merge. Whichever
+gets picked up next needs a **rebase onto `main` first**, not a merge,
+before its own hardware/live verification even starts. `rip-speed-
+monitoring` is the one closest to mattering (it's a milestone
+criterion) — rebase it first.
+(`spinitron-priority-matching`, the fifth stale-looking branch `scheduler
+status` surfaces, is a false alarm: `git branch --merged main` confirms
+it's already fully merged, just an unpruned local ref — safe to delete,
+not a real backlog item.)
+
+See `LIVE-TEST-DEBRIEF-2026-07-24.md` for the full session debrief this
+was drawn from.
 
 *(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
 it doesn't fit wtul's own read of its bar.)*

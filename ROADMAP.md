@@ -124,6 +124,10 @@ Needs before starting:
 ## 3. Label printer integration - seamless tagging
 
 **Decision (2026-07-20): Phomemo M02** (BLE thermal receipt/label printer).
+**Status (2026-07-24): built on branch `label-printer-integration`
+(render + wire), not yet hardware-verified, and now 13 commits stale
+behind `main` — needs a rebase before it's touched again (see FOCUS.md's
+"Branch health" note).**
 Not a fresh integration - it's already been hacked working elsewhere on
 this machine: `~/.local/bin/catprint` wraps
 `~/.local/share/catprinter/m02print.py` (Bleak BLE client, builds raw
@@ -152,7 +156,13 @@ Idea: once a disc finishes ripping, automatically print a physical label
 existing GAS project already backing
 [this sheet](https://docs.google.com/spreadsheets/d/1GzIbZUhn6fF7JPC20kdG2IMomvZlDBidDTy5cDEF3U8/edit?gid=1753821521#gid=1753821521)
 and deployed at `hf7y.com/localshow.html` (forwards to the script's `/exec`
-link) - not a new Flask/FastAPI service. This is the same
+link) - not a new Flask/FastAPI service.
+**Status (2026-07-24): built on branch `web-photo-capture` (pairing/
+upload/embed pipeline), not yet hardware/live-verified, and now 13
+commits stale behind `main` — needs a rebase before it's touched again
+(see FOCUS.md's "Branch health" note). `ocr-metadata-extraction` (#7)
+branches off this one, so rebasing this branch first is the prerequisite
+for rebasing that one too.** This is the same
 "static-page-that-forwards-to-a-GAS-`/exec`-endpoint" shape `vkv-inventory`
 and `chezz` already use (see the scheduler's `INTAKE.md` for the shared
 tracker-backend contract those two converged on) - worth checking whether
@@ -207,6 +217,19 @@ Needs before starting:
 
 ## 6. Monitor and improve ripping speed
 
+**Status (2026-07-24): built 2026-07-18 on branch `rip-speed-monitoring`
+(reports per-session/overall median extraction speed, slow-track flags,
+a degradation warning, and a live `(read speed N.Nx)` line per track;
+parser unit-tested against real logs), but NOT merged and now 36 commits
+stale behind `main`** — it predates every fix from today's live test
+session (cddbread.N parsing, TOC-discid resume, install.sh's lib/
+bundling, Unknown-fallback, Spinitron-gating revert, eject soft-key).
+Needs a **rebase onto `main` first**, then hands-on hardware
+verification against a real rip (the live per-track print only fires
+during an actual rip) before merge — this is the last non-metadata
+criterion on wtul's current stability milestone (see FOCUS.md's "Branch
+health" note and `LIVE-TEST-DEBRIEF-2026-07-24.md`).
+
 Idea: surface actual rip throughput (cdparanoia reports an extraction
 speed multiplier, e.g. "4.2x") so slow rips are visible instead of just
 "it's taking a while," and use that to decide whether the bottleneck is
@@ -231,7 +254,9 @@ Needs before starting:
 
 **Status (2026-07-24): built, unit-tested, branch `ocr-metadata-extraction`
 (branched off `web-photo-capture` since it depends on #4's cover-photo
-plumbing, which isn't in `main` yet). Not live-verified.** `lib/ocr_metadata.py`
+plumbing, which isn't in `main` yet). Not live-verified. Also 13 commits
+stale behind `main` (same figure as #4, since it branches off it) — see
+FOCUS.md's "Branch health" note; rebase #4 first, then this one.** `lib/ocr_metadata.py`
 finds a disc's `cover.jpg` (saved by #4's `photo_capture.associate_photo`)
 and runs the `tesseract` CLI on it directly (not the `pytesseract`
 wrapper - not installable here without overriding the OS's
