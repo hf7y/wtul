@@ -108,3 +108,32 @@ hand.
   instead. Not built - no confirmed need yet beyond this one session,
   and worth checking `eject` actually works against this drive
   (SuperDrive quirks already bit us once today) before wiring it in.
+- **2026-07-24 (parked, bigger build): fallback metadata service for
+  discs AcoustID+Discogs (#2) can't identify.** Surfaced live: `fix
+  <discid>` ran its full suggestion path and still came back empty for
+  a disc neither service recognized. Not every disc will resolve via
+  those two - a third fallback (a different fingerprint DB, MusicBrainz
+  direct search by manually-typed title, or similar) is real future
+  work, not designed yet. Ties into #2. **Standing rule in the meantime
+  (stated live, not a code change): unidentifiable tracks don't go on a
+  compilation/mix burn** - curation excludes them, they stay in
+  `~/Music/ripped/` for a later identification pass rather than
+  blocking or getting silently included in a mix.
+- **2026-07-24 (parked, bigger build): fingerprint-cache re-rips of
+  previously-ripped discs, symlink instead of re-ripping.** Idea from
+  live use: `wtul` runs on a recurring (weekly) schedule and the same
+  disc may come back around already-ripped. If a disc's audio
+  fingerprint (or its TOC discid, cheaper but less robust across
+  different pressings of the same release) matches something already in
+  `~/Music/ripped/`, skip the actual rip and symlink the existing files
+  instead of re-encoding from scratch - saves real rip time on repeats.
+  Explicitly floated as a stopgap ("weekly rips can symlink across weeks
+  until a more robust database gets developed") rather than the final
+  shape - a real cross-week catalog/database is the eventual version.
+  Not designed: what identity check to use (TOC discid is what's
+  already computed for free vs. an audio fingerprint being more
+  robust-but-costlier), where the cache index lives, what happens on a
+  fingerprint collision. Ties into #2's fingerprinting work (same
+  `fpcalc`/AcoustID machinery could double as the identity check here)
+  and generalizes beyond just already-identified discs, per the idea's
+  own framing ("general good idea even for detected rips").
