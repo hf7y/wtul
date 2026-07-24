@@ -67,15 +67,18 @@ Needs before starting:
 
 ## 2. External API to fix metadata on already-ripped unidentified discs
 
-**Status (2026-07-20): built and wired, partially live.** AcoustID key
-obtained (app "Local Show") and stored at `~/.config/wtul/secrets.env`
+**Status (2026-07-24): built, wired, and live-verified end-to-end
+(non-hardware parts).** Both keys now live at `~/.config/wtul/secrets.env`
 (gitignored-by-location, never committed - `bin/wtul-rip` loads it at
-startup via `os.environ.setdefault`, real env vars still win). Discogs
-token not obtained yet - the fallback path is built and tested but a
-silent no-op until `DISCOGS_TOKEN` exists, same pattern as the AcoustID
-key itself would've been.
+startup via `os.environ.setdefault`, real env vars still win):
+`ACOUSTID_API_KEY` (since 2026-07-20) and now `DISCOGS_TOKEN` (the
+"localshow" token, per the realisateur decision recorded 2026-07-24 to
+go with Discogs over further AcoustID/Chromaprint work - see
+`.claude/QUESTIONS.md`'s consumed reply). `libchromaprint-tools` is also
+now installed (`fpcalc version 1.5.1`), clearing the last blocker noted
+below.
 
-`lib/metadata_lookup.py` (new, 15 unit tests, all mocked - no real
+`lib/metadata_lookup.py` (15 unit tests, all mocked - no real
 network/audio) fingerprints each ripped track with `fpcalc`, queries
 AcoustID, takes a majority vote across tracks for the album (and
 separately for the artist, since a disc can have artist consensus
@@ -87,21 +90,28 @@ accepts it) rather than auto-applying it - fuzzy matching stays
 confirm/edit, never blind, same principle #7 later calls for on OCR
 output.
 
-**Not yet live-verified**: `fpcalc` (Chromaprint) still isn't installed
-on this machine - asked the user to run
-`sudo apt install -y libchromaprint-tools` (needs an interactive sudo
-prompt this session couldn't provide). Until then `resolve_disc_metadata`
-degrades to its safe no-op (falls straight through to the existing
-manual prompt), same as before this session's work.
+**Live-verified this session** (real network calls, no mocks, no CD
+drive needed): `fpcalc` fingerprinted a real local audio file end to end;
+the AcoustID HTTP round-trip succeeded cleanly (empty result set, as
+expected for non-music test audio - the point was confirming the API
+call itself works, not a real match); `discogs_search_by_artist` returned
+a real catalog hit for "Radiohead". One test (`test_wiring.py`'s
+`test_acoustid_key_env_var_picked_up`) was reading the real
+`~/.config/wtul/secrets.env` instead of a clean fixture once that file
+had real content - fixed by pointing `HOME` at an empty tmp dir for that
+test.
+
+**Still pending real hands-on verification**: the whole path has never
+run against an actual freshly-ripped disc via `fix_by_discid()` itself -
+next real rip of a previously-unidentified disc is the real test.
 
 Idea: extend the `fix <discid>` command so it can look up the correct
 metadata automatically instead of only accepting manual artist/album entry.
 
 Needs before starting:
-- ~~`fpcalc` (Chromaprint) installed~~ - still pending, see Status above.
-- ~~AcoustID API key~~ - obtained, see Status above.
-- A Discogs personal access token (self-serve at discogs.com) - not
-  obtained yet; the fallback path is ready and waiting on it.
+- ~~`fpcalc` (Chromaprint) installed~~ - done, see Status above.
+- ~~AcoustID API key~~ - done, see Status above.
+- ~~A Discogs personal access token~~ - done, see Status above.
 - Rate limits for both - check before hammering either on a whole backlog
   of unidentified discs at once (not yet exercised against real volume).
 

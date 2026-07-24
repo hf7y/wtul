@@ -39,7 +39,11 @@ def test_catalog_writeback_module_importable_from_wtul_rip(monkeypatch):
     assert hasattr(mod.catalog_writeback, "post_row")
 
 
-def test_acoustid_key_env_var_picked_up(monkeypatch):
+def test_acoustid_key_env_var_picked_up(monkeypatch, tmp_path):
+    # Point HOME at an empty tmp dir so this doesn't pick up the real
+    # ~/.config/wtul/secrets.env (which has real secrets on the actual
+    # machine) - this test wants to see only the env vars it sets itself.
+    monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("ACOUSTID_API_KEY", "  test-key  ")
     monkeypatch.delenv("DISCOGS_TOKEN", raising=False)
     mod = _load_wtul_rip(monkeypatch)
