@@ -18,6 +18,7 @@ the manual prompt is always the real fallback.
 """
 import json
 import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,6 +29,10 @@ DISCOGS_SEARCH_URL = "https://api.discogs.com/database/search"
 # AcoustID's own 0-1 match confidence - a per-track guess below this isn't
 # trusted enough to count toward the album majority vote.
 DEFAULT_SCORE_THRESHOLD = 0.5
+# AcoustID's documented client rate limit is 3 requests/second; resolving a
+# disc fires one lookup per track in a loop, so a normal 10-14 track album
+# would burst well past that without spacing requests out.
+ACOUSTID_MIN_INTERVAL = 0.35
 
 
 def fingerprint_file(path, fpcalc_bin="fpcalc", timeout=30):
@@ -135,23 +140,35 @@ def discogs_search_by_artist(token, artist, base_url=DISCOGS_SEARCH_URL, timeout
 
 
 def resolve_disc_metadata(track_paths, acoustid_key=None, discogs_token=None,
-                           fpcalc_bin="fpcalc"):
+                           fpcalc_bin="fpcalc", min_interval=ACOUSTID_MIN_INTERVAL,
+                           sleep_fn=time.sleep, clock=time.monotonic):
     """Best-effort (artist, album) suggestion for an unidentified disc's
     already-ripped tracks. AcoustID first (fingerprints real audio); if
     that finds an artist but no confident album, Discogs searches that
     artist's catalog as a fallback. No key/binary, or total lookup
     failure, returns (None, None) - `fix_by_discid`'s manual prompt is
     the ultimate fallback either way, so this never raises.
+
+    AcoustID lookups are throttled to `min_interval` seconds apart (its
+    documented client limit is 3/s) since this fires one request per
+    track - a normal album's tracklist would otherwise burst well past
+    that. `sleep_fn`/`clock` are injectable so tests don't actually wait.
     """
     if not acoustid_key:
         return None, None
     track_guesses = []
+    last_call = None
     for path in track_paths:
         duration, fingerprint = fingerprint_file(path, fpcalc_bin=fpcalc_bin)
         if duration is None:
             track_guesses.append(None)
             continue
+        if last_call is not None:
+            elapsed = clock() - last_call
+            if elapsed < min_interval:
+                sleep_fn(min_interval - elapsed)
         guesses = acoustid_lookup(acoustid_key, duration, fingerprint)
+        last_call = clock()
         track_guesses.append(guesses[0] if guesses else None)
     artist, album, _score = best_album_guess(track_guesses)
     if not artist:

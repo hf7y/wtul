@@ -11,6 +11,8 @@ import os
 import subprocess
 from unittest.mock import patch
 
+import pytest
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _MODPATH = os.path.join(_HERE, "..", "lib", "metadata_lookup.py")
 _spec = importlib.util.spec_from_file_location("metadata_lookup", _MODPATH)
@@ -144,3 +146,33 @@ def test_resolve_disc_metadata_unfingerprintable_track_skipped():
     with patch.object(ml, "fingerprint_file", return_value=(None, None)):
         artist, album = ml.resolve_disc_metadata(["/a.mp3"], acoustid_key="key")
     assert (artist, album) == (None, None)
+
+
+def test_resolve_disc_metadata_throttles_between_acoustid_calls():
+    fp_result = (180, "fp")
+    guess = [{"score": 0.9, "artist": "Fela Kuti", "album": "Expensive Shit", "title": "A"}]
+    sleeps = []
+    # track1 call at t=0.0; track2's pre-call check at t=0.1 (only 0.1s
+    # elapsed, under the 0.35s floor -> must sleep 0.25s); its post-call
+    # clock reads t=0.45 (as if the sleep+API call actually took that
+    # long); track3's pre-call check at t=0.9 is already >=0.35s past
+    # that -> no sleep needed for the second gap.
+    ticks = iter([0.0, 0.1, 0.45, 0.9, 1.0])
+    with patch.object(ml, "fingerprint_file", return_value=fp_result), \
+         patch.object(ml, "acoustid_lookup", return_value=guess):
+        ml.resolve_disc_metadata(
+            ["/a.mp3", "/b.mp3", "/c.mp3"], acoustid_key="key",
+            min_interval=0.35, sleep_fn=sleeps.append, clock=lambda: next(ticks))
+    assert sleeps == [pytest.approx(0.25)]
+
+
+def test_resolve_disc_metadata_no_sleep_when_calls_already_spaced_out():
+    fp_result = (180, "fp")
+    guess = [{"score": 0.9, "artist": "Fela Kuti", "album": "Expensive Shit", "title": "A"}]
+    ticks = iter([0.0, 1.0, 1.0])
+    with patch.object(ml, "fingerprint_file", return_value=fp_result), \
+         patch.object(ml, "acoustid_lookup", return_value=guess):
+        ml.resolve_disc_metadata(
+            ["/a.mp3", "/b.mp3"], acoustid_key="key",
+            min_interval=0.35, sleep_fn=lambda s: (_ for _ in ()).throw(AssertionError("should not sleep")),
+            clock=lambda: next(ticks))

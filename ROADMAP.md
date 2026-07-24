@@ -112,8 +112,14 @@ Needs before starting:
 - ~~`fpcalc` (Chromaprint) installed~~ - done, see Status above.
 - ~~AcoustID API key~~ - done, see Status above.
 - ~~A Discogs personal access token~~ - done, see Status above.
-- Rate limits for both - check before hammering either on a whole backlog
-  of unidentified discs at once (not yet exercised against real volume).
+- ~~Rate limits for both~~ - **2026-07-24**: `resolve_disc_metadata` now
+  throttles AcoustID lookups to one per 0.35s (its documented 3 req/s
+  client limit) since it fires one request per track in a loop - a
+  normal multi-track album would otherwise burst past that on a single
+  disc, not just across a backlog. Discogs is only ever called once per
+  disc (artist-catalog fallback), so no throttle needed there. 2 new
+  tests (`tests/test_metadata_lookup.py`), throttle is injectable
+  (`sleep_fn`/`clock`) so tests don't actually wait.
 
 ## 3. Label printer integration - seamless tagging
 
