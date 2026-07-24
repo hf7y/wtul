@@ -59,3 +59,13 @@ hand.
   there's no key to gate on; the official `fetch_recent_spins(api_key)`
   client itself is left in `lib/spinitron.py` unused, in case station
   access is ever granted later.
+- **2026-07-24 (parked, hardware): Tascam CD-500B relay playback cabling.**
+  User wants two CD-500B decks wired for relay playback (deck B auto-starts
+  when deck A's disc ends, for gapless broadcast continuity). Likely needs:
+  (1) a relay link cable between the two units' `RELAY` jacks (believed to
+  be 1/4" TS on the CD-500B, unverified against the actual manual/unit),
+  and (2) audio-out cables to the console (XLR balanced vs RCA unbalanced,
+  whichever the board expects). Not yet confirmed against the real
+  hardware/manual - no purchase made. Revisit when ready to actually buy;
+  this ties into ROADMAP.md's "capture-on-play" pipeline (#9) if relay
+  playback becomes the live-source side of that eventually.
