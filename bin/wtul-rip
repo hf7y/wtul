@@ -46,7 +46,7 @@ DEVNAME = os.path.basename(DEV)
 HOME = os.path.expanduser("~")
 # Rips land directly in a dated mix folder (2026-07-24: what gets ripped on a
 # given day IS that day's mix, no separate curation-into-a-mix-folder step -
-# see FOCUS.md's "Branch health"/ROADMAP.md #6 for the ~/Music/ripped -> here
+# see FOCUS.md's "Branch health"/"Current focus" #6 for the ~/Music/ripped -> here
 # migration note). RIPDIR is always *today's* folder - the one abcde.conf's
 # OUTPUTDIR/WAVOUTPUTDIR must also point at, since album_dir_path() below has
 # to mirror wherever abcde actually writes. Historical searches (fix_by_discid,
