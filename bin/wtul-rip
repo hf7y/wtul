@@ -317,6 +317,17 @@ def apply_live_input(line, queue, tempdir, artist, album, titles, ripped, discid
             print(f"  -> track {n} title set to '{val}'")
         return artist, album, titles, None
 
+    m = re.match(r"^only\s+(\d+(?:\s+\d+)*)$", line, re.IGNORECASE)
+    if m:
+        nums = [int(t) for t in m.group(1).split()]
+        valid = [n for n in nums if n in titles]
+        if valid:
+            queue[:] = valid
+            print(f"  -> ripping only: {', '.join(str(n) for n in queue)}")
+        else:
+            print("  -> none of those are valid track numbers, ignoring")
+        return artist, album, titles, None
+
     if re.match(r"^\d+(\s+\d+)*$", line):
         nums = [int(t) for t in line.split()]
         front = [n for n in nums if n in queue]
@@ -573,33 +584,31 @@ def rip_session(dev):
     print(f"\nLooked up: {artist.strip()} - {album.strip()} ({len(track_nums)} tracks)")
     print_tracklist(track_nums, titles, durations, already_done)
 
-    # Only rip tracks Spinitron confirms have already aired - this station's
-    # workflow (2026-07-24) wants captured audio limited to what's actually
-    # been played on air, not the whole disc. If the lookup itself fails we
-    # can't tell what's been played, so skip rather than guess by ripping
-    # everything.
+    queue = [n for n in track_nums if n not in already_done]
+    if not queue:
+        print("All tracks already ripped.")
+        return True
+
+    # Spinitron is informational only, not a gate - ripping starts at track 1
+    # immediately regardless (2026-07-24: gating the whole rip on a match
+    # turned out too restrictive live; smarter auto-detection, e.g. local
+    # audio fingerprinting or a maintained-feed earcon, is future work, see
+    # QUESTIONS.md - this is deliberately the simple version for now).
     try:
         spins = spinitron.fetch_recent_spins_public()
     except (urllib.error.URLError, OSError, ValueError) as e:
-        print(f"Spinitron lookup failed ({e}) - can't tell what's aired, skipping this disc. "
-              f"Press 'e' to eject, or leave it for a retry once the lookup is working.")
-        return False
+        print(f"Spinitron lookup failed ({e}), ripping full disc in track order.")
+    else:
+        matched = spinitron.matched_track_numbers(titles, artist, spins)
+        if matched:
+            print(f"Spinitron: {len(matched)} track(s) already played on air: "
+                  f"{', '.join(str(n) for n in sorted(matched))} (informational only - "
+                  f"type 'only {sorted(matched)[0]}' to rip just one of these)")
 
-    matched = spinitron.matched_track_numbers(titles, artist, spins)
-    if not matched:
-        print("No tracks on this disc have aired yet per Spinitron - nothing to rip. "
-              "Press 'e' to eject, or leave it for a retry once something's played.")
-        return False
-    queue = [n for n in track_nums if n in matched and n not in already_done]
-    if not queue:
-        print(f"{len(matched)} track(s) have aired per Spinitron but are already ripped - "
-              f"nothing new to rip. Press 'e' to eject, or leave it for a retry.")
-        return False
-
-    print(f"Spinitron: ripping {len(queue)} already-played track(s): "
-          f"{', '.join(str(n) for n in queue)}")
-    print("While it's running you can type (then Enter):")
+    print(f"Ripping now, starting with track {queue[0]}. While it's running you can type "
+          f"(then Enter):")
     print("  5 2                 - reprioritize remaining tracks (rip 5, then 2, then the rest)")
+    print("  only 5 7            - drop the rest of the queue, rip just these track(s)")
     print("  artist=Real Name    - fix the artist (retags any tracks already ripped too)")
     print("  album=Real Album    - fix the album (same)")
     print("  3=Real Track Title  - fix track 3's title (retags it if already ripped)")
