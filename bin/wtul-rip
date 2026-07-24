@@ -23,6 +23,7 @@ import spinitron
 import metadata_lookup
 import catalog_writeback
 import photo_capture
+import ocr_metadata
 
 
 def _load_secrets_env(path):
@@ -331,6 +332,14 @@ def fix_by_discid(discid):
                       f"(unverified match, confirm or edit below)")
             else:
                 print("  -> no confident match, falling back to manual entry.")
+
+    if not suggested_artist and not suggested_album:
+        ocr_lines = ocr_metadata.ocr_cover_candidates(old_dir)
+        if ocr_lines:
+            print("  -> OCR text from this disc's cover photo (unverified, "
+                  "type in what you read below - not auto-filled):")
+            for line in ocr_lines:
+                print(f"       {line}")
 
     artist_prompt = f"New artist (blank to use suggestion '{suggested_artist}'" \
         if suggested_artist else "New artist (blank to keep 'Unknown Artist'"

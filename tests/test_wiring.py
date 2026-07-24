@@ -57,6 +57,12 @@ def test_photo_capture_module_importable_from_wtul_rip(monkeypatch):
     assert hasattr(mod.photo_capture, "check_photo")
 
 
+def test_ocr_metadata_module_importable_from_wtul_rip(monkeypatch):
+    mod = _load_wtul_rip(monkeypatch)
+    assert hasattr(mod.ocr_metadata, "ocr_cover_candidates")
+    assert hasattr(mod.ocr_metadata, "find_cover_image")
+
+
 def test_photo_capture_url_env_var_picked_up(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("PHOTO_CAPTURE_URL", "  https://example.com/exec  ")
