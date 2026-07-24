@@ -52,6 +52,28 @@ def test_render_label_handles_long_track_titles():
     assert image.width == lr.PRINTER_WIDTH
 
 
+def test_render_label_columns_splits_tracklist_in_half():
+    tracks = [f"Track {n}" for n in range(1, 15)]  # 14 tracks, matches tonight's real mix count
+    strips = lr.render_label_columns("WTUL", "Local Show 2026-07-24", tracklist=tracks, discid="mix-1")
+    assert len(strips) == 2
+    for strip in strips:
+        assert strip.width == lr.PRINTER_WIDTH
+        assert strip.height > 0
+
+
+def test_render_label_columns_qr_only_on_last_strip():
+    tracks = ["A", "B", "C", "D"]
+    with_discid = lr.render_label_columns("Artist", "Album", tracklist=tracks, discid="deadbeef")
+    without_discid_last = lr.render_label("Artist (cont'd)", "Album", tracklist=tracks[2:])
+    # last strip should be taller than the no-QR equivalent (it's carrying the QR block).
+    assert with_discid[-1].height > without_discid_last.height
+
+
+def test_render_label_columns_no_tracklist_returns_one_strip():
+    strips = lr.render_label_columns("Artist", "Album")
+    assert len(strips) == 1
+
+
 def test_print_label_missing_catprint_binary(tmp_path):
     image = lr.render_label("Artist", "Album")
     ok, reason = lr.print_label(image, catprint_bin=str(tmp_path / "no-such-binary"))

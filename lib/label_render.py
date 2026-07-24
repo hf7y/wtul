@@ -95,6 +95,34 @@ def render_label(artist, album, tracklist=None, discid=None, width=PRINTER_WIDTH
     return image
 
 
+def render_label_columns(artist, album, tracklist=None, discid=None, width=PRINTER_WIDTH):
+    """Same content as render_label(), split into multiple narrow strips
+    meant to be printed separately and taped side-by-side - the M02's
+    print width is fixed at 384px, so a long tracklist (e.g. a 14-track
+    mix compilation) prints as one very long, awkward strip rather than
+    something that fits a CD case. Returns a list of PIL Images, one per
+    strip: strip 1 carries the artist/album header plus roughly the
+    first half of the tracklist; strip 2+ carry the rest (a "(cont'd)"
+    marker instead of repeating the header) and the QR code (if any) on
+    the last strip. Alignment when pasting is manual - this only splits
+    the content, it doesn't attempt to align cut lines physically.
+    """
+    tracklist = tracklist or []
+    half = -(-len(tracklist) // 2)  # ceil division - first half gets the extra track on an odd count
+    chunks = [tracklist[:half], tracklist[half:]] if tracklist else [[]]
+
+    strips = []
+    for i, chunk in enumerate(chunks):
+        is_last = i == len(chunks) - 1
+        if i == 0:
+            strips.append(render_label(artist, album, tracklist=chunk,
+                                        discid=discid if is_last else None, width=width))
+        else:
+            strips.append(render_label(f"{artist} (cont'd)", album, tracklist=chunk,
+                                        discid=discid if is_last else None, width=width))
+    return strips
+
+
 def print_label(image, catprint_bin=None, timeout=30):
     """Shells out to `catprint` (the BLE thermal-printer CLI) with the
     rendered image. Returns (True, None) on a clean exit, or
