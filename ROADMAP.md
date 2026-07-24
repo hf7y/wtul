@@ -223,20 +223,43 @@ Needs before starting:
 
 ## 7. OCR on the photo-scan layer for metadata generation
 
-Idea: extend the phone-photo album art feature (#4 above) so the photo
+**Status (2026-07-24): built, unit-tested, branch `ocr-metadata-extraction`
+(branched off `web-photo-capture` since it depends on #4's cover-photo
+plumbing, which isn't in `main` yet). Not live-verified.** `lib/ocr_metadata.py`
+finds a disc's `cover.jpg` (saved by #4's `photo_capture.associate_photo`)
+and runs the `tesseract` CLI on it directly (not the `pytesseract`
+wrapper - not installable here without overriding the OS's
+externally-managed-Python guard, and the CLI is the simpler,
+already-established pattern this codebase uses for `fpcalc` too). Wired
+into `fix_by_discid()` in `bin/wtul-rip`: when AcoustID/Discogs (#2) find
+no confident match, cleaned OCR candidate lines are printed to the user
+alongside the existing manual artist/album prompt - never auto-filled,
+same confirm/edit discipline #2's suggestions already follow. 20 new
+tests (`tests/test_ocr_metadata.py`), subprocess fully mocked.
+
+**Still pending real verification, on two fronts**: (a) `tesseract-ocr`
+itself is not installed on this machine (no apt/sudo access this
+session) - the real binary has never been invoked; (b) even once
+installed, this has never been tried against a real disc's real cover
+photo, which itself needs #4's live phone-capture flow to produce a
+cover.jpg in the first place. Both blockers need to clear (tesseract
+installed + a real #4 capture) before this can be trusted.
+
+~~Idea: extend the phone-photo album art feature (#4 above) so the photo
 isn't just embedded art - OCR the cover for artist/title/tracklist text
 as another metadata source, useful especially for unidentified discs
-where CDDB/MusicBrainz have nothing.
+where CDDB/MusicBrainz have nothing.~~ - see Status above.
 
 Needs before starting:
-- Depends on #4 existing first (the photo capture/association pipeline).
-- An OCR engine - Tesseract (`tesseract-ocr` + `pytesseract`) is the
-  obvious local/offline default; cloud OCR APIs are an alternative if
-  accuracy on stylized album-cover fonts turns out to be poor.
-- OCR'd text would be messy/unstructured - needs a step to turn raw OCR
-  output into actual artist/album/tracklist fields (fuzzy-match against
-  MusicBrainz results, or just present it to the user as a suggestion
-  they confirm/edit rather than trusting it blindly).
+- ~~Depends on #4 existing first (the photo capture/association
+  pipeline).~~ - exists, on unmerged branch `web-photo-capture`.
+- ~~An OCR engine~~ - `tesseract-ocr` CLI, not yet installed on this
+  machine (needs `sudo apt install tesseract-ocr` - no sudo password
+  available in an unattended session).
+- ~~OCR'd text would be messy/unstructured~~ - resolved as "present to
+  the user as a suggestion they confirm/edit", per Status above; no
+  fuzzy-match-to-fields step was built, deliberately (raw OCR lines are
+  shown as-is, not parsed into structured fields).
 
 ## 8. Auto-update the local music catalog spreadsheet
 
