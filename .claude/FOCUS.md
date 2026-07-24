@@ -1,6 +1,27 @@
 <!-- Per-project scope marker -- read FIRST by wtul's own nightly-batch/
      bug-sweep before touching anything else. -->
 
+## Stability milestone
+
+**Current (2026-07-24, realisateur):** wtul reliably rips a disc
+end-to-end with correct track metadata (Spinitron public-scrape +
+Discogs lookup, both credential-free) and logs it in a form Zach can
+trust without hand-checking — status: in-progress
+Done when:
+- [x] FOCUS.md/ROADMAP.md reconciliation done (thin pointer above, kept
+      2026-07-24)
+- [ ] rip-speed monitoring (`rip-speed-monitoring` branch) hands-on
+      hardware-verified against a real rip, then merged
+- [ ] metadata-fix API (#2) built against Discogs (decided 2026-07-24,
+      token already in hand) and live-verified against a real rip
+
+Ideas beyond this bar are PARKED by default (see
+realisateur/STABILITY-MILESTONES.md): capture-on-play pipeline
+front-end (#9), label printer (#3), catalog spreadsheet (#8), web-photo/
+OCR (#4/#7), show-run sheet (#10) — all deeper-integration items still
+needing hardware/design decisions the user hasn't made yet (see
+QUESTIONS.md's 2026-07-18 either/or, parts b/c/d).
+
 ## Current focus
 
 `ROADMAP.md` (repo root) is the single source of truth for the real
