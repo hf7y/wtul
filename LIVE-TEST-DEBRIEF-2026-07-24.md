@@ -89,6 +89,25 @@ no non-merged commit is on it, nothing lost).
 - Deleted the dead, already-merged `spinitron-priority-matching` local
   branch ref.
 
+## Tonight's post-show ritual: how far it actually got
+
+Separate from the dev work above - this was also the first live run of
+the actual end-of-show routine (rip → clean up metadata → assemble a
+dated mix folder → burn → print a label to bring to next week's show).
+**It stopped after the playlist/metadata-repair stage: no CD was
+burned, no label got printed.** Burning was never in scope for this
+session (out of scope for `wtul-rip` itself per the pipeline vision in
+ROADMAP.md - a manual step regardless). The label did not print due to
+the M02 BLE issue above (`.claude/QUESTIONS.md`'s "Phomemo M02 BLE
+connection is unreliable" entry) - real label content was built,
+previewed, and repeatedly attempted, but every attempt either failed to
+connect or was interrupted mid-print. What *did* get done and is solid
+for next time: today's rips landed correctly in
+`~/Music/mixes/2026-07-24/`, metadata was cleaned up (`belong`'s
+corrupted album tag fixed, cross-referenced against a real Discogs
+release), and a full 14-track label was designed, tested, and ready to
+print the moment the BLE issue is actually resolved.
+
 ## Foundation for the next dev cycle
 
 1. **Rebase `rip-speed-monitoring` onto `main`, then hardware-verify it
