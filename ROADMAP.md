@@ -18,8 +18,18 @@ already a piece of it once unblocked:
   tool works today. #1's Spinitron spin-matching already gives a
   "this was just played" signal - #9 is figuring out how that turns into
   actual captured audio.
-- **Curation** - manual, no roadmap item yet (a person picks favorites
-  from the capture pile and assembles a mix) - not blocking anything else.
+- **Curation** - **retired as a separate step, 2026-07-24.** Originally
+  "manual, no roadmap item yet, not blocking anything else"; superseded
+  same day by a simpler decision made live during an actual show-night
+  ritual: rips land directly in a dated mix folder
+  (`~/Music/mixes/YYYY-MM-DD/`, see `bin/wtul-rip`'s `RIPDIR`/
+  `MIXES_ROOT`), so whatever got ripped on a given day just **is** that
+  day's mix - no separate copy-into-a-mix-folder pass. The old flat
+  `~/Music/ripped/<Artist>/<Album>` destination is retired for new rips
+  (history from before the switch stays there, untouched). One curation
+  step remains, unavoidably manual: unidentified tracks (`Unknown Album
+  (discid)`) are excluded from what gets burned, by rule, and stay put
+  for a later identification pass rather than landing on a mix.
 - **Burn + label** - burning is out of scope for `wtul-rip` (it's a
   ripper, not a burner) but **#3's Phomemo M02 label printer is the label
   half**, once a mix is burned by hand.
@@ -223,8 +233,10 @@ a degradation warning, and a live `(read speed N.Nx)` line per track;
 parser unit-tested against real logs), but NOT merged and now 36 commits
 stale behind `main`** — it predates every fix from today's live test
 session (cddbread.N parsing, TOC-discid resume, install.sh's lib/
-bundling, Unknown-fallback, Spinitron-gating revert, eject soft-key).
-Needs a **rebase onto `main` first**, then hands-on hardware
+bundling, Unknown-fallback, Spinitron-gating revert, eject soft-key),
+**and predates the ripped->mixes dated-folder migration below (its own
+log-parsing needs will read `~/Music/mixes/.logs/`, not `~/Music/ripped/
+.logs/`, once rebased).** Needs a **rebase onto `main` first**, then hands-on hardware
 verification against a real rip (the live per-track print only fires
 during an actual rip) before merge — this is the last non-metadata
 criterion on wtul's current stability milestone (see FOCUS.md's "Branch
@@ -239,7 +251,10 @@ encode quality/bitrate trades CPU+time for size).
 Needs before starting:
 - Parse cdparanoia's speed output per track (it prints a running
   extraction-speed multiplier - need to check exact format across the
-  runs already logged in `~/Music/ripped/.logs/` for the regex to match).
+  runs already logged in `~/Music/mixes/.logs/` for the regex to match
+  (moved here 2026-07-24 from `~/Music/ripped/.logs/`, see the
+  ripped->mixes migration above; older logs from before the move are
+  still at the old path, untouched).
 - Decide what "monitoring" means concretely: live display during the
   existing `sh_live` streaming (cheap - just surface a number that's
   already in the output), vs. persisted stats across rips to spot

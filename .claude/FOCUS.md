@@ -46,6 +46,19 @@ status` surfaces, is a false alarm: `git branch --merged main` confirms
 it's already fully merged, just an unpruned local ref — safe to delete,
 not a real backlog item.)
 
+**Update, same evening:** `label-printer-integration` picked up first
+(real hardware verification in progress against a real mix burn - see
+ROADMAP.md #3), rebased clean onto `main` (one conflict, in ROADMAP.md's
+own status text, resolved). Also landed on `main` this evening, unrelated
+to the branch-staleness problem above but touching the same rip
+destination code every one of those four branches assumes: **rips now
+land in a dated mix folder** (`~/Music/mixes/YYYY-MM-DD/`, not the old
+flat `~/Music/ripped/<Artist>/<Album>`) - see ROADMAP.md's "Vision"
+section and `bin/wtul-rip`'s `RIPDIR`/`MIXES_ROOT`. Whoever rebases the
+other three branches next needs to be aware of *this* migration too, not
+just the live-test bug fixes - anything in those branches assuming
+`~/Music/ripped` as the rip destination will need a second look.
+
 See `LIVE-TEST-DEBRIEF-2026-07-24.md` for the full session debrief this
 was drawn from.
 

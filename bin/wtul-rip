@@ -44,8 +44,17 @@ _load_secrets_env(os.path.join(os.path.expanduser("~"), ".config", "wtul", "secr
 DEV = f"/dev/{sys.argv[1]}" if len(sys.argv) > 1 else "/dev/sr0"
 DEVNAME = os.path.basename(DEV)
 HOME = os.path.expanduser("~")
-RIPDIR = os.path.join(HOME, "Music", "ripped")
-LOGDIR = os.path.join(RIPDIR, ".logs")
+# Rips land directly in a dated mix folder (2026-07-24: what gets ripped on a
+# given day IS that day's mix, no separate curation-into-a-mix-folder step -
+# see FOCUS.md's "Branch health"/ROADMAP.md #6 for the ~/Music/ripped -> here
+# migration note). RIPDIR is always *today's* folder - the one abcde.conf's
+# OUTPUTDIR/WAVOUTPUTDIR must also point at, since album_dir_path() below has
+# to mirror wherever abcde actually writes. Historical searches (fix_by_discid,
+# history()) glob across MIXES_ROOT/*/ instead of just RIPDIR, since a disc
+# fixed today may have been ripped on an earlier show night.
+MIXES_ROOT = os.path.join(HOME, "Music", "mixes")
+RIPDIR = os.path.join(MIXES_ROOT, time.strftime("%Y-%m-%d"))
+LOGDIR = os.path.join(MIXES_ROOT, ".logs")
 LOCKFILE = f"/tmp/cd-autorip-{DEVNAME}.lock"
 NOEJECT_CONF = os.path.join(HOME, ".abcde-noeject.conf")
 ACOUSTID_API_KEY = os.environ.get("ACOUSTID_API_KEY", "").strip()
@@ -348,12 +357,15 @@ def fix_by_discid(discid):
     live in-session edits, this works even after wtul-rip has moved on,
     because the disc ID is baked into the "Unknown Album (discid)" folder
     name itself."""
-    matches = glob.glob(os.path.join(RIPDIR, "*", f"*({discid})"))
+    matches = glob.glob(os.path.join(MIXES_ROOT, "*", "*", f"*({discid})"))
     if not matches:
         print(f"No ripped album found for disc ID '{discid}'.")
         return
     old_dir = matches[0]
     print(f"Found: {old_dir}")
+    # Fix stays in the mix folder it was actually ripped into (not today's),
+    # so a disc fixed days after a show still ends up on that show's mix.
+    day_dir = os.path.dirname(os.path.dirname(old_dir))
 
     suggested_artist, suggested_album = None, None
     if ACOUSTID_API_KEY:
@@ -379,7 +391,7 @@ def fix_by_discid(discid):
     if not new_album:
         print("No album given, leaving as-is.")
         return
-    new_dir = os.path.join(RIPDIR, new_artist, new_album)
+    new_dir = os.path.join(day_dir, new_artist, new_album)
     os.makedirs(new_dir, exist_ok=True)
     try:
         from mutagen.easyid3 import EasyID3
@@ -527,6 +539,7 @@ def rip_session(dev):
     """Returns True if the disc is fully ripped and can stop being retried,
     False if it should still be offered for retry (some tracks left)."""
     os.makedirs(LOGDIR, exist_ok=True)
+    os.makedirs(RIPDIR, exist_ok=True)
     if free_kb(RIPDIR) < 524288:
         print(f"Only {free_kb(RIPDIR)}KB free at {RIPDIR}, refusing to start.")
         return True
@@ -708,7 +721,7 @@ def history():
         return
 
     albums = {}
-    for root, dirs, files in os.walk(RIPDIR):
+    for root, dirs, files in os.walk(MIXES_ROOT):
         dirs[:] = [d for d in dirs if d != ".logs" and not d.startswith("abcde.")]
         for name in files:
             if not name.lower().endswith(".mp3"):
