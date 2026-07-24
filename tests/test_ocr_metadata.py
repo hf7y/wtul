@@ -1,8 +1,10 @@
 """Unit tests for lib/ocr_metadata.py (ROADMAP #7). All subprocess calls
-are mocked - no real tesseract binary needed to exercise this logic (it
-isn't installed on this machine as of 2026-07-24, see the module
-docstring), same convention as test_metadata_lookup.py before fpcalc was
-installed for ROADMAP #2.
+are mocked - no real tesseract binary is assumed to be on this machine
+(or the CI/dev machine this eventually runs on), same convention as
+test_metadata_lookup.py before fpcalc was installed for ROADMAP #2. A
+real, non-mocked end-to-end run against `scripts/install-tesseract-local.sh`'s
+local install was done live 2026-07-24 (see FOCUS.md #7) - these tests
+cover the logic, not a substitute for that.
 
 Run with:  python3 -m pytest tests/ -q
 """
@@ -101,6 +103,55 @@ def test_ocr_image_success(tmp_path, monkeypatch):
     text = ocr_metadata.ocr_image(str(image), tesseract_bin="tesseract")
     assert text == "Some Artist\nSome Album\n"
     assert captured["cmd"] == ["tesseract", str(image), "stdout"]
+
+
+# --- find_tesseract ---
+
+def test_find_tesseract_on_path(monkeypatch):
+    monkeypatch.setattr(ocr_metadata.shutil, "which", lambda name: "/usr/bin/tesseract")
+    assert ocr_metadata.find_tesseract() == ("/usr/bin/tesseract", None)
+
+
+def test_find_tesseract_local_install_fallback(monkeypatch, tmp_path):
+    fake_root = tmp_path / "tesseract-user"
+    tessdata = fake_root / "usr/share/tesseract-ocr/5/tessdata"
+    tessdata.mkdir(parents=True)
+    bin_path = fake_root / "usr/bin/tesseract"
+    bin_path.parent.mkdir(parents=True, exist_ok=True)
+    bin_path.write_bytes(b"fake")
+
+    monkeypatch.setattr(ocr_metadata, "LOCAL_INSTALL_DIR", str(fake_root))
+    monkeypatch.setattr(ocr_metadata, "LOCAL_TESSERACT_BIN", str(bin_path))
+    monkeypatch.setattr(ocr_metadata.shutil, "which", lambda name: None)
+
+    resolved_bin, env = ocr_metadata.find_tesseract()
+    assert resolved_bin == str(bin_path)
+    assert env["TESSDATA_PREFIX"] == str(tessdata)
+
+
+def test_find_tesseract_local_install_missing_tessdata(monkeypatch, tmp_path):
+    fake_root = tmp_path / "tesseract-user"
+    bin_path = fake_root / "usr/bin/tesseract"
+    bin_path.parent.mkdir(parents=True, exist_ok=True)
+    bin_path.write_bytes(b"fake")
+
+    monkeypatch.setattr(ocr_metadata, "LOCAL_INSTALL_DIR", str(fake_root))
+    monkeypatch.setattr(ocr_metadata, "LOCAL_TESSERACT_BIN", str(bin_path))
+    monkeypatch.setattr(ocr_metadata.shutil, "which", lambda name: None)
+
+    assert ocr_metadata.find_tesseract() == (None, None)
+
+
+def test_find_tesseract_none_available(monkeypatch, tmp_path):
+    monkeypatch.setattr(ocr_metadata, "LOCAL_TESSERACT_BIN", str(tmp_path / "nope"))
+    monkeypatch.setattr(ocr_metadata.shutil, "which", lambda name: None)
+    assert ocr_metadata.find_tesseract() == (None, None)
+
+
+def test_ocr_cover_candidates_no_tesseract_anywhere(tmp_path, monkeypatch):
+    (tmp_path / "cover.jpg").write_bytes(b"fake")
+    monkeypatch.setattr(ocr_metadata, "find_tesseract", lambda: (None, None))
+    assert ocr_metadata.ocr_cover_candidates(str(tmp_path)) == []
 
 
 # --- clean_ocr_lines ---
