@@ -159,3 +159,20 @@ hand.
   (c) something else entirely (out-of-range, printer-side sleep/wake
   quirk). Needs a dedicated session with the printer in hand to
   reproduce deliberately rather than firefighting mid-ritual.
+
+  **Update, same evening:** worse than first thought - it's not just
+  losing the initial connection, it interrupts an *already-printing*
+  job partway through (a real partial/corrupted print, not just a
+  failed attempt - wastes label tape). `plasmashell` (KDE's desktop
+  shell, which owns the Bluetooth applet/bluedevil) is confirmed running
+  on this machine. Tried `bluetoothctl untrust` on the M02 on the theory
+  that KDE's auto-reconnect only targets trusted devices - **did not
+  help, reconnected anyway** (trust restored afterward, no reason to
+  leave it off since it didn't fix anything). So auto-reconnect here
+  isn't gated on the trust flag - rules out the simplest fix, narrows
+  the real fix to either finding bluedevil's own auto-reconnect setting
+  specifically (not the generic trust flag) or option (b) above
+  (`print_label()` disconnecting immediately before *and pinning the
+  connection through* its own print, not just disconnecting once
+  beforehand - the mid-print steal means a one-time pre-disconnect
+  isn't enough).
