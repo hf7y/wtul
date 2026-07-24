@@ -543,16 +543,27 @@ def rip_session(dev):
         print("Could not find abcde's metadata scratch dir - aborting.")
         return True
     discid, artist, album, titles = parse_cddb_metadata(tempdir)
+    toc_discid, toc_ntracks = read_toc_discid(tempdir)
+    if not toc_discid:
+        print("Metadata scrape failed to produce a discid - aborting.")
+        return True
     if not discid:
-        discid, ntracks = read_toc_discid(tempdir)
-        if not discid:
-            print("Metadata scrape failed to produce a discid - aborting.")
-            return True
         print("No CDDB/MusicBrainz match - ripping as Unknown Artist/Unknown "
               "Album. Fix live with artist=/album=/3=Real Title, or "
-              f"'fix {discid}' after.")
+              f"'fix {toc_discid}' after.")
         artist, album = "Unknown Artist", ""
-        titles = {n: f"Track {n}" for n in range(1, ntracks + 1)}
+        titles = {n: f"Track {n}" for n in range(1, toc_ntracks + 1)}
+    # abcde's own tempdir naming and the -C resume flag both key off the
+    # TOC-based discid (cddbdiscid, e.g. "700a8608"), not whatever ID
+    # scheme the winning metadata source used internally - MusicBrainz's
+    # own DISCID field is a different (base64-ish) format, not the classic
+    # CDDB hex id, and passing that to -C broke per-track resume (abcde
+    # looked for a scratch dir keyed by the MusicBrainz id, found nothing,
+    # "Discid undefined") whenever the match came from MusicBrainz rather
+    # than plain CDDB. Live-verified 2026-07-24: this disc's CDDB lookup
+    # returned no match ("none"), only MusicBrainz did, and that's exactly
+    # when this broke.
+    discid = toc_discid
 
     durations = track_durations(dev)
     track_nums = sorted(titles.keys()) or sorted(durations.keys())
