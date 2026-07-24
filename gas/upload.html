@@ -1,0 +1,72 @@
+<!--
+  Companion template for gas/photo-capture.gs.js's doGet (HtmlService.
+  createTemplateFromFile('upload') - the filename must match exactly
+  once both files are pasted into the same Apps Script project, Apps
+  Script strips the .html extension itself).
+
+  Minimal camera-capture upload form: <input capture> opens the phone's
+  camera directly rather than a file picker, then this page's own JS
+  converts the photo to base64 and POSTs it to this same web app's
+  /exec URL (google.script.run isn't usable here since the page itself
+  is served from a URL a phone browser navigated to directly, not one
+  embedded in an authenticated Apps Script UI - a plain fetch() against
+  the deployed /exec URL is the reliable path from a plain webpage).
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>wtul - snap the cover</title>
+  <style>
+    body { font-family: sans-serif; max-width: 480px; margin: 2em auto; padding: 0 1em; text-align: center; }
+    input[type=file] { margin: 1.5em 0; }
+    button { font-size: 1.1em; padding: 0.6em 1.5em; }
+    #status { margin-top: 1em; color: #444; }
+  </style>
+</head>
+<body>
+  <h2>Snap the album cover</h2>
+  <p>Disc: <code><?= discId ?></code></p>
+  <input type="file" id="photo" accept="image/*" capture="environment">
+  <br>
+  <button id="send" disabled>Upload</button>
+  <div id="status"></div>
+
+  <script>
+    var pairingCode = <?!= JSON.stringify(pairingCode) ?>;
+    var discId = <?!= JSON.stringify(discId) ?>;
+    var input = document.getElementById('photo');
+    var button = document.getElementById('send');
+    var status = document.getElementById('status');
+
+    input.addEventListener('change', function () {
+      button.disabled = !input.files.length;
+    });
+
+    button.addEventListener('click', function () {
+      var file = input.files[0];
+      if (!file) return;
+      button.disabled = true;
+      status.textContent = 'Uploading...';
+      var reader = new FileReader();
+      reader.onload = function () {
+        var base64 = reader.result.split(',')[1];
+        fetch(window.location.href.split('?')[0], {
+          method: 'POST',
+          body: JSON.stringify({
+            pairing_code: pairingCode,
+            disc_id: discId,
+            image_base64: base64,
+            mime: file.type || 'image/jpeg'
+          })
+        }).then(function () {
+          status.textContent = 'Uploaded - you can close this page.';
+        }).catch(function () {
+          status.textContent = 'Upload may have failed - check with whoever is ripping the disc.';
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  </script>
+</body>
+</html>

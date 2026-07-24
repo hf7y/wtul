@@ -8,6 +8,7 @@ disc you insert until you quit it.
 """
 import fcntl
 import glob
+import json
 import os
 import re
 import select
@@ -21,6 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 import spinitron
 import metadata_lookup
 import catalog_writeback
+import photo_capture
 
 
 def _load_secrets_env(path):
@@ -51,6 +53,8 @@ NOEJECT_CONF = os.path.join(HOME, ".abcde-noeject.conf")
 ACOUSTID_API_KEY = os.environ.get("ACOUSTID_API_KEY", "").strip()
 DISCOGS_TOKEN = os.environ.get("DISCOGS_TOKEN", "").strip()
 CATALOG_WRITEBACK_URL = os.environ.get("CATALOG_WRITEBACK_URL", "").strip()
+PHOTO_CAPTURE_URL = os.environ.get("PHOTO_CAPTURE_URL", "").strip()
+PENDING_PHOTOS_FILE = os.path.join(RIPDIR, ".photo-pending.json")
 
 PER_TRACK_TIMEOUT = 900       # 15 min/track cap - a bad drive can't hang forever
 MAX_LOG_BYTES = 5_000_000     # matches the old wrapper's runaway-log cap
@@ -627,10 +631,85 @@ def rip_session(dev):
             else:
                 print("Catalog: write-back failed or unreachable, not logged - "
                       "add it to the sheet by hand if it matters.")
+        if PHOTO_CAPTURE_URL:
+            pairing_code = photo_capture.new_pairing_code()
+            url = photo_capture.pairing_url(PHOTO_CAPTURE_URL, pairing_code, discid)
+            print(f"Photo capture: open {url} on a phone to attach cover art "
+                  f"(code {pairing_code}), then run 'photos' later to pull it down.")
+            _record_pending_photo(pairing_code, discid, album_dir_path(artist, album, discid),
+                                   list(ripped.values()), artist.strip(), album.strip())
         return True
     else:
         print("Some tracks failed.")
         return False
+
+
+def _load_pending_photos():
+    """Pairing codes issued by past rip sessions whose phone upload hasn't
+    been pulled down yet - a plain JSON list, not a database, since it's
+    small and only this process touches it. Missing/corrupt file reads
+    as empty rather than raising, same non-fatal discipline as the rest
+    of the photo-capture integration (ROADMAP #4)."""
+    if not os.path.isfile(PENDING_PHOTOS_FILE):
+        return []
+    try:
+        with open(PENDING_PHOTOS_FILE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def _save_pending_photos(items):
+    os.makedirs(os.path.dirname(PENDING_PHOTOS_FILE), exist_ok=True)
+    with open(PENDING_PHOTOS_FILE, "w") as f:
+        json.dump(items, f, indent=2)
+
+
+def _record_pending_photo(pairing_code, discid, album_dir, mp3s, artist, album):
+    pending = _load_pending_photos()
+    pending.append({
+        "pairing_code": pairing_code,
+        "disc_id": discid,
+        "dir": album_dir,
+        "mp3s": mp3s,
+        "artist": artist,
+        "album": album,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    })
+    _save_pending_photos(pending)
+
+
+def check_pending_photos():
+    """Single non-blocking poll of every pending pairing (see 'photos' in
+    the interactive menu) - not a wait, since this runs inline in the
+    same loop as disc-insert polling and must never hang it. A pairing
+    whose photo hasn't landed yet is just left pending for the next
+    check."""
+    if not PHOTO_CAPTURE_URL:
+        print("PHOTO_CAPTURE_URL not set - nothing to check.")
+        return
+    pending = _load_pending_photos()
+    if not pending:
+        print("No pending photo pairings.")
+        return
+    still_pending = []
+    for rec in pending:
+        result = photo_capture.check_photo(PHOTO_CAPTURE_URL, rec["pairing_code"])
+        label = f"{rec.get('artist', '?')} - {rec.get('album', '?')}"
+        if result and result.get("found"):
+            image_path = os.path.join(rec["dir"], "cover.jpg")
+            if photo_capture.download_image(result["url"], image_path):
+                ok, failed = photo_capture.embed_album_art(image_path, rec["mp3s"])
+                print(f"{label}: photo embedded on {len(ok)}/{len(rec['mp3s'])} track(s)"
+                      + (f", {len(failed)} failed" if failed else "") + ".")
+            else:
+                print(f"{label}: photo found but download failed, will retry.")
+                still_pending.append(rec)
+        else:
+            still_pending.append(rec)
+    _save_pending_photos(still_pending)
+    if still_pending:
+        print(f"{len(still_pending)}/{len(pending)} pairing(s) still waiting on a phone upload.")
 
 
 def history():
@@ -697,6 +776,7 @@ def status():
 
 def main():
     print(f"wtul-rip watching {DEV}. Press 'h' for history, 's' for status, "
+          f"'photos' to check for pending phone photo uploads, "
           f"'fix <discid>' to relabel a past disc, 'q' to quit.\n")
     last_seen_empty = True
     while True:
@@ -710,6 +790,8 @@ def main():
                 history()
             elif low == "s":
                 status()
+            elif low == "photos":
+                check_pending_photos()
             elif low.startswith("fix "):
                 fix_by_discid(cmd.split(None, 1)[1].strip())
             continue

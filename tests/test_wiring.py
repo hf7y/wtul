@@ -49,3 +49,28 @@ def test_acoustid_key_env_var_picked_up(monkeypatch, tmp_path):
     mod = _load_wtul_rip(monkeypatch)
     assert mod.ACOUSTID_API_KEY == "test-key"
     assert mod.DISCOGS_TOKEN == ""
+
+
+def test_photo_capture_module_importable_from_wtul_rip(monkeypatch):
+    mod = _load_wtul_rip(monkeypatch)
+    assert hasattr(mod.photo_capture, "new_pairing_code")
+    assert hasattr(mod.photo_capture, "check_photo")
+
+
+def test_photo_capture_url_env_var_picked_up(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PHOTO_CAPTURE_URL", "  https://example.com/exec  ")
+    mod = _load_wtul_rip(monkeypatch)
+    assert mod.PHOTO_CAPTURE_URL == "https://example.com/exec"
+
+
+def test_pending_photos_roundtrip(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    mod = _load_wtul_rip(monkeypatch)
+    assert mod._load_pending_photos() == []
+    mod._record_pending_photo("abc123", "disc-1", "/tmp/album", ["/tmp/album/1.mp3"],
+                               "Artist", "Album")
+    pending = mod._load_pending_photos()
+    assert len(pending) == 1
+    assert pending[0]["pairing_code"] == "abc123"
+    assert pending[0]["disc_id"] == "disc-1"
