@@ -9,10 +9,14 @@ printer's fixed 384px width, followed by a QR code (when a disc ID is
 given) encoding a `wtul:<discid>` URI for later `fix <discid>` lookups.
 """
 import os
+import re
 import subprocess
 import textwrap
 
 from PIL import Image, ImageDraw, ImageFont
+
+_GENERIC_TITLE_RE = re.compile(r"^Track\s*\d+$", re.IGNORECASE)
+ENTRY_GAP = 40  # px of vertical breathing room between mix-label track entries
 
 PRINTER_WIDTH = 384
 _FONT_PATHS = {
@@ -93,6 +97,151 @@ def render_label(artist, album, tracklist=None, discid=None, width=PRINTER_WIDTH
         image.paste(qr_img, (0, int(y)))
 
     return image
+
+
+def _wrap_to_pixel_width(draw, text, font, max_width_px):
+    """Word-wraps by measured pixel width rather than character count -
+    textwrap.wrap's char-count wrapping doesn't track a real column width
+    once margins carve down the usable area, so long words/lines miss the
+    actual edge. Falls back to one line if a single word alone is wider
+    than max_width_px (never splits mid-word)."""
+    words = text.split()
+    if not words:
+        return [""]
+    lines, current = [], words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width_px:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def _draw_left(draw, x, y, text, font, max_width_px, fill="black", line_spacing=6):
+    """Left-aligned text at (x, y), pixel-width-wrapped to max_width_px.
+    Returns the y position just below the last line drawn."""
+    for line in _wrap_to_pixel_width(draw, text, font, max_width_px):
+        bbox = draw.textbbox((0, 0), line, font=font)
+        line_height = bbox[3] - bbox[1]
+        draw.text((x, y), line, font=font, fill=fill)
+        y += line_height + line_spacing
+    return y
+
+
+def render_mix_label(tracks, header_line=None, discid=None, width=PRINTER_WIDTH,
+                      margin_frac=0.15, font_size=32):
+    """Renders a compilation-mix label: a numbered, left-aligned,
+    newline-separated entry per track (no per-album "Track N" filler
+    title, no bold station/artist header - see live feedback
+    2026-07-24 on the first print of this session). `tracks` is
+    mix_label.collect_mix_tracks()'s output (title/artist/album/
+    duration/genre/year dicts) so the numbering matches burn order
+    exactly - that's the actual point of the label, indexing into the
+    burned disc's file order, not song identification.
+
+    Per-track entry, one field per line (blank fields simply don't get a
+    line - never printed as a placeholder):
+        N. Title - Artist      (or "N. Artist" if title is the generic
+                                 "Track N" abcde falls back to - not a
+                                 real title, so it's dropped rather than
+                                 printed as noise)
+        Album - m:ss
+        Genre
+        Year
+    `header_line` (e.g. "Local Show 2026-07-24") is optional and, unlike
+    render_label(), has no separate artist/station line above it - that
+    line was cut entirely per the same feedback, not merged into this
+    one.
+    """
+    margin = int(width * margin_frac)
+    usable = width - 2 * margin
+    font = _font("regular", font_size)
+
+    qr_img = None
+    if discid:
+        import qrcode
+        qr_size = usable
+        qr_img = qrcode.make(f"wtul:{discid}", border=2).resize((qr_size, qr_size))
+
+    def entry_lines(t):
+        lines = []
+        title = (t.get("title") or "").strip()
+        if title and not _GENERIC_TITLE_RE.match(title):
+            lines.append(f"{t['n']}. {title} - {t['artist']}")
+        else:
+            lines.append(f"{t['n']}. {t['artist']}")
+        mins, secs = divmod(int(t["duration"]), 60)
+        lines.append(f"{t['album']} - {mins}:{secs:02d}")
+        if t.get("genre"):
+            lines.append(t["genre"])
+        if t.get("year"):
+            lines.append(str(t["year"]))
+        return lines
+
+    numbered = [{"n": i + 1, **t} for i, t in enumerate(tracks)]
+
+    def draw_entries(draw, y):
+        for i, t in enumerate(numbered):
+            for line in entry_lines(t):
+                y = _draw_left(draw, margin, y, line, font, usable, line_spacing=10)
+            if i < len(numbered) - 1:
+                # Generous gap + a ruled line between entries - tight spacing with
+                # no visual break between tracks was flagged live 2026-07-24 as
+                # "terrible, not usable" on the first print of this layout.
+                y += ENTRY_GAP // 2
+                draw.line([(margin, y), (margin + usable, y)], fill="black", width=2)
+                y += ENTRY_GAP // 2
+            else:
+                y += ENTRY_GAP
+        return y
+
+    def render_pass(draw):
+        y = 20
+        if header_line:
+            y = _draw_left(draw, margin, y, header_line, font, usable, line_spacing=10) + ENTRY_GAP
+        y = draw_entries(draw, y)
+        if qr_img:
+            y += qr_img.height + 20
+        return y
+
+    probe = Image.new("1", (width, 10), 1)
+    total_height = render_pass(ImageDraw.Draw(probe))
+
+    image = Image.new("1", (width, int(total_height)), 1)
+    draw = ImageDraw.Draw(image)
+    y = 20
+    if header_line:
+        y = _draw_left(draw, margin, y, header_line, font, usable, line_spacing=10) + ENTRY_GAP
+    y = draw_entries(draw, y)
+    if qr_img:
+        image.paste(qr_img, (margin, int(y)))
+
+    return image
+
+
+def render_mix_label_columns(tracks, header_line=None, discid=None, width=PRINTER_WIDTH,
+                              margin_frac=0.15, font_size=32):
+    """render_mix_label(), split into two strips to print separately and
+    tape side-by-side (same reasoning as render_label_columns() - see
+    that docstring). Track numbering stays continuous across both
+    strips (burn-order index, not restarted per strip); only the second
+    strip carries the QR code."""
+    half = -(-len(tracks) // 2)
+    chunks = [tracks[:half], tracks[half:]] if tracks else [[]]
+    strips = []
+    for i, chunk in enumerate(chunks):
+        is_last = i == len(chunks) - 1
+        offset = sum(len(c) for c in chunks[:i])
+        numbered_chunk = [dict(t, n=offset + j + 1) for j, t in enumerate(chunk)]
+        strip_header = header_line if i == 0 else (f"{header_line} (cont'd)" if header_line else None)
+        strips.append(render_mix_label(
+            [dict(t) for t in numbered_chunk], header_line=strip_header,
+            discid=discid if is_last else None, width=width,
+            margin_frac=margin_frac, font_size=font_size))
+    return strips
 
 
 def render_label_columns(artist, album, tracklist=None, discid=None, width=PRINTER_WIDTH):

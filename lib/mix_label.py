@@ -6,6 +6,9 @@ genre/year, which nothing upstream tags at all.
 """
 import glob
 import os
+import time
+
+DISCOGS_MIN_INTERVAL = 1.1  # matches Discogs's documented ~60/min authenticated rate limit
 
 
 def _read_tags(path):
@@ -25,14 +28,20 @@ def _format_duration(seconds):
     return f"{seconds // 60}:{seconds % 60:02d}"
 
 
-def collect_mix_tracks(mix_dir, discogs_token=None, genre_year_lookup=None):
+def collect_mix_tracks(mix_dir, discogs_token=None, genre_year_lookup=None,
+                        min_interval=DISCOGS_MIN_INTERVAL, sleep_fn=time.sleep, clock=time.monotonic):
     """Returns a list of track dicts (title/artist/album/duration/genre/
     year), one per mp3 under mix_dir, sorted by (album folder, track
     number prefix). genre_year_lookup defaults to
     metadata_lookup.discogs_genre_year but is overridable for tests -
     called once per unique (artist, album) pair, not once per track, to
     avoid hammering Discogs with duplicate lookups for a multi-track
-    album."""
+    album. Throttled to min_interval between those calls (same pattern
+    as metadata_lookup.resolve_disc_metadata's AcoustID throttle) - a
+    real mix of 8+ albums fired requests fast enough to get silently
+    rate-limited by Discogs mid-batch, 2026-07-24 (every lookup after
+    the first few came back empty even though a single isolated lookup
+    for the same artist/album worked fine moments later)."""
     if genre_year_lookup is None:
         import metadata_lookup
         def genre_year_lookup(artist, album):
@@ -41,13 +50,19 @@ def collect_mix_tracks(mix_dir, discogs_token=None, genre_year_lookup=None):
     paths = sorted(glob.glob(os.path.join(mix_dir, "*", "*", "*.mp3")))
     genre_year_cache = {}
     tracks = []
+    last_call = None
     for path in paths:
         tags = _read_tags(path)
         artist = tags["artist"] or "Unknown Artist"
         album = tags["album"] or "Unknown Album"
         key = (artist, album)
         if key not in genre_year_cache:
+            if last_call is not None:
+                wait = min_interval - (clock() - last_call)
+                if wait > 0:
+                    sleep_fn(wait)
             genre_year_cache[key] = genre_year_lookup(artist, album)
+            last_call = clock()
         genre, year = genre_year_cache[key]
         tracks.append({
             "title": tags["title"] or os.path.basename(path),

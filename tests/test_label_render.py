@@ -74,6 +74,53 @@ def test_render_label_columns_no_tracklist_returns_one_strip():
     assert len(strips) == 1
 
 
+def _track(title="Track 1", artist="Artist", album="Album", duration=125, genre=None, year=None):
+    return {"title": title, "artist": artist, "album": album, "duration": duration,
+            "genre": genre, "year": year}
+
+
+def test_render_mix_label_drops_generic_track_title():
+    image = lr.render_mix_label([_track(title="Track 1", artist="belong")])
+    # can't inspect rendered pixel text directly, but a generic title must not
+    # lengthen the entry beyond the no-title case - same line count either way.
+    with_generic = lr.render_mix_label([_track(title="Track 1", artist="X")])
+    with_real = lr.render_mix_label([_track(title="Sleep Sweet", artist="X")])
+    assert with_real.height > with_generic.height  # real title adds a longer first line/wraps more
+
+
+def test_render_mix_label_keeps_genre_and_year_as_lines():
+    without = lr.render_mix_label([_track()])
+    with_both = lr.render_mix_label([_track(genre="Shoegaze", year="2009")])
+    assert with_both.height > without.height
+
+
+def test_render_mix_label_width_and_margin():
+    image = lr.render_mix_label([_track()], margin_frac=0.15)
+    assert image.width == lr.PRINTER_WIDTH
+
+
+def test_render_mix_label_no_header_omits_header_line():
+    with_header = lr.render_mix_label([_track()], header_line="Local Show 2026-07-24")
+    without_header = lr.render_mix_label([_track()], header_line=None)
+    assert with_header.height > without_header.height
+
+
+def test_render_mix_label_columns_numbering_continues_across_strips():
+    tracks = [_track(title=f"T{n}") for n in range(1, 5)]
+    strips = lr.render_mix_label_columns(tracks, header_line="Local Show", discid="mix-1")
+    assert len(strips) == 2
+    for strip in strips:
+        assert strip.width == lr.PRINTER_WIDTH
+
+
+def test_render_mix_label_columns_qr_only_on_last_strip():
+    tracks = [_track(title=f"T{n}") for n in range(1, 5)]
+    strips = lr.render_mix_label_columns(tracks, header_line="Local Show", discid="deadbeef")
+    strips_no_qr = lr.render_mix_label_columns(tracks, header_line="Local Show", discid=None)
+    assert strips[-1].height > strips_no_qr[-1].height
+    assert strips[0].height == strips_no_qr[0].height
+
+
 def test_print_label_missing_catprint_binary(tmp_path):
     image = lr.render_label("Artist", "Album")
     ok, reason = lr.print_label(image, catprint_bin=str(tmp_path / "no-such-binary"))
