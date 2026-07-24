@@ -137,3 +137,25 @@ hand.
   `fpcalc`/AcoustID machinery could double as the identity check here)
   and generalizes beyond just already-identified discs, per the idea's
   own framing ("general good idea even for detected rips").
+- **2026-07-24 (parked, hardware/flaky): Phomemo M02 BLE connection is
+  unreliable - flag for a dedicated session, not chased further
+  tonight.** During live label-printing (#3), `print_label()`'s
+  underlying `catprint`/Bleak client repeatedly failed with "Device ...
+  was not found" or timed out, inconsistently, across many retries in
+  one evening - sometimes a retry printed successfully anyway despite
+  reporting failure (the BLE write can complete before the client's own
+  cleanup/disconnect does), sometimes nothing came out at all.
+  User's live theory, worth checking first: **the OS's own Bluetooth
+  GUI/applet keeps auto-connecting to the M02** (`bluetoothctl info`
+  showed `Connected: yes` more than once with no deliberate connect from
+  this session) - BLE peripherals typically only accept one active
+  connection, so a GUI-held connection would explain Bleak's client
+  failing to get its own. Manually disconnecting via `bluetoothctl
+  disconnect` before a print attempt helped at least once but not
+  consistently. Not designed/fixed: whether to (a) find and disable
+  whatever's auto-connecting (a GNOME/KDE Bluetooth applet auto-reconnect
+  setting?), (b) have `print_label()` proactively disconnect any
+  existing connection via `bluetoothctl` before invoking `catprint`, or
+  (c) something else entirely (out-of-range, printer-side sleep/wake
+  quirk). Needs a dedicated session with the printer in hand to
+  reproduce deliberately rather than firefighting mid-ritual.
