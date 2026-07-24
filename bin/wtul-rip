@@ -143,6 +143,21 @@ def find_cddbread(tempdir):
     return candidates[0] if candidates else None
 
 
+def read_toc_discid(tempdir):
+    """Fallback disc ID computed purely from the TOC (track offsets), not a
+    CDDB/MusicBrainz match - abcde always writes this via cd-discid before
+    even attempting a lookup, so it's available even when nothing matched.
+    Returns (discid, track_count), or (None, 0) if even this is missing."""
+    path = os.path.join(tempdir, "cddbdiscid")
+    if not os.path.isfile(path):
+        return None, 0
+    with open(path, "r", errors="replace") as f:
+        parts = f.read().split()
+    if len(parts) < 2:
+        return None, 0
+    return parts[0], int(parts[1])
+
+
 def parse_cddb_metadata(tempdir):
     """Read the cddbread.N file abcde writes after a metadata scrape."""
     path = find_cddbread(tempdir)
@@ -529,8 +544,15 @@ def rip_session(dev):
         return True
     discid, artist, album, titles = parse_cddb_metadata(tempdir)
     if not discid:
-        print("Metadata scrape failed to produce a discid - aborting.")
-        return True
+        discid, ntracks = read_toc_discid(tempdir)
+        if not discid:
+            print("Metadata scrape failed to produce a discid - aborting.")
+            return True
+        print("No CDDB/MusicBrainz match - ripping as Unknown Artist/Unknown "
+              "Album. Fix live with artist=/album=/3=Real Title, or "
+              f"'fix {discid}' after.")
+        artist, album = "Unknown Artist", ""
+        titles = {n: f"Track {n}" for n in range(1, ntracks + 1)}
 
     durations = track_durations(dev)
     track_nums = sorted(titles.keys()) or sorted(durations.keys())
