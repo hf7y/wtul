@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 import spinitron
 import metadata_lookup
 import catalog_writeback
+import label_render
 
 
 def _load_secrets_env(path):
@@ -627,6 +628,15 @@ def rip_session(dev):
             else:
                 print("Catalog: write-back failed or unreachable, not logged - "
                       "add it to the sheet by hand if it matters.")
+        tracklist = [titles.get(n, f"Track {n}") for n in track_nums]
+        label = label_render.render_label(artist.strip(), album.strip(),
+                                           tracklist=tracklist, discid=discid)
+        printed, reason = label_render.print_label(label)
+        if printed:
+            print("Label: printed.")
+        else:
+            print(f"Label: not printed ({reason}) - printer may be off/out of range, "
+                  "not a rip failure.")
         return True
     else:
         print("Some tracks failed.")

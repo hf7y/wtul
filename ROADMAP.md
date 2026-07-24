@@ -117,24 +117,33 @@ Needs before starting:
 
 ## 3. Label printer integration - seamless tagging
 
-**Decision (2026-07-20): Phomemo M02** (BLE thermal receipt/label printer).
-Not a fresh integration - it's already been hacked working elsewhere on
-this machine: `~/.local/bin/catprint` wraps
-`~/.local/share/catprinter/m02print.py` (Bleak BLE client, builds raw
-ESC/POS-ish command bytes from a PIL image, `--device` defaults to a
-paired MAC `EA:F3:B6:A2:70:33`). `~/.local/bin/phomemo_printer` is a
-second, separate `phomemo_printer` pip package's CLI - both exist, pick
-whichever is more reliable once actually exercised for this. Ready to
-build: no more hardware/driver research needed, just (a) render a label
-image (artist/album/tracklist, maybe a QR code encoding the disc ID for
-`fix <discid>` lookups later - Pillow can do both the text layout and QR
-if a `qrcode` lib is added) sized to the M02's ~384px print width (see
-`m02print.py`'s `resize`), then (b) shell out to `catprint <path>` (or
-call `m02print.py` directly) once a rip finishes. Per the pipeline vision
-above, this printer is also the label half of the "burn a curated mix,
-print its label" loop (#8), not just per-disc labels for `wtul-rip`
-itself - worth designing the image-render step generically enough to
-serve both.
+**Status (2026-07-24): built and wired, branch `label-printer-integration`,
+NEEDS HANDS-ON HARDWARE VERIFICATION.** `lib/label_render.py` (new, 8 unit
+tests, all pure-PIL - no BLE) renders a label image (artist/album/
+tracklist, centered/wrapped text via DejaVu Sans with a PIL-bitmap-font
+fallback) sized to the M02's fixed 384px width, plus a QR code encoding
+`wtul:<discid>` when a disc ID is given (for later `fix <discid>`
+lookups) - visually spot-checked, looks right. `print_label()` shells out
+to `~/.local/bin/catprint` (mockable via a `catprint_bin` param, which the
+tests exercise with stub scripts) and degrades to `(False, reason)` on
+any failure - missing binary, timeout, non-zero exit - never raising, so
+a printer that's off/out of BLE range doesn't fail the rip itself.
+`rip_session()` in `bin/wtul-rip` now calls this right after a fully-
+successful rip (same gate as #8's catalog write-back), building the
+tracklist from the same `titles`/`track_nums` already in scope.
+
+**Not yet live-verified**: never run against the real Phomemo M02 over
+BLE - this session has no Bluetooth adapter/paired printer to test
+against. Next real rip is the real test; if the actual paired MAC has
+drifted from `m02print.py`'s hardcoded default
+(`EA:F3:B6:A2:70:33`), `print_label()`'s no-`-d` call will just fail
+cleanly (logged, not fatal) rather than print to the wrong device.
+
+Per the pipeline vision above, this printer is also the label half of
+the "burn a curated mix, print its label" loop (#8) - `render_label()`
+was written generically (artist/album/tracklist/discid, not
+wtul-rip-specific) so that reuse doesn't need a rewrite once #9 exists,
+just a caller with the mix's own metadata instead of a single disc's.
 
 Idea: once a disc finishes ripping, automatically print a physical label
 (artist/album/tracklist, maybe a QR code encoding the disc ID for
