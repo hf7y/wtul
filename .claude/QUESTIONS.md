@@ -83,6 +83,23 @@ hand.
   needs: polling interval/rate-limit for (1), and a sound mechanism
   choice for (2) (terminal bell vs a real audio file needs an output
   device decision). Not built this round.
+- **2026-07-24 (parked, bigger build): smarter on-air-detection than the
+  Spinitron page scrape.** After live-testing, default ripping no longer
+  gates on a Spinitron match at all (see `bin/wtul-rip` commit
+  `7c55323`) - it's informational only, because the public page only
+  covers the current show and can lag/miss. Two directions floated for
+  actually closing that gap, not built (explicitly called out as a
+  "bigger build", not a same-session tweak):
+  (a) local audio fingerprinting - listen to (or otherwise sample) what's
+  actually on air and match it directly, instead of trusting Spinitron's
+  page to be current; would need an audio input source this repo doesn't
+  have today (line-in from the board? a stream URL?) - undesigned.
+  (b) an earcon (audible cue) when Spinitron's feed is confirmed still
+  updating, as a "this data source is being kept live" signal, distinct
+  from the failure-detection earcon idea above. Could combine both. Ties
+  into ROADMAP #1 (Spinitron integration) and #9 (capture-on-play) -
+  worth reconciling with both rather than freelancing a third mechanism
+  when this actually gets built.
 - **2026-07-24 (parked, hardware): eject softkey, since the drive doesn't
   have a physical eject button.** Surfaced during live testing (`q` got
   stuck / disc needed manual handling with no way to eject from the
