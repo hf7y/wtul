@@ -78,6 +78,16 @@ def earcon():
         sys.stdout.flush()
 
 
+def _int_env(name, default):
+    try:
+        return int(os.environ.get(name) or default)
+    except ValueError:
+        return default
+
+
+SPIN_POLL_SECS = _int_env("WTUL_SPIN_POLL_SECS", 60)
+
+
 def sh(cmd, timeout=None):
     """Run a command, return (returncode, combined stdout+stderr text).
 
@@ -837,10 +847,51 @@ def status():
     print(f"Rip in progress: {'yes' if busy else 'no'}")
 
 
+def _spin_key(spin):
+    return (spin.get("artist", ""), spin.get("song", ""))
+
+
+def _format_spin(spin):
+    artist = spin.get("artist") or "?"
+    song = spin.get("song") or "?"
+    return f"{artist} - {song}"
+
+
+def check_for_new_spins(seen_spin_keys, quiet_errors=True):
+    """Fetch the current Spinitron public page and print any spin not in
+    seen_spin_keys yet (so the on-air signal #1 already computes per-rip is
+    also visible live while wtul-rip idles between discs, not just baked
+    into the queue order at rip time).
+
+    Returns the updated seen_spin_keys set (unchanged on a fetch failure -
+    same best-effort/never-abort posture rip_session()'s own Spinitron call
+    already has). seen_spin_keys=None means "first check" - it seeds the
+    set silently instead of printing the station's whole current-show
+    history as if it just happened.
+    """
+    try:
+        spins = spinitron.fetch_recent_spins_public()
+    except (urllib.error.URLError, ValueError, OSError) as e:
+        if not quiet_errors:
+            print(f"  (spin check failed: {e})")
+        return seen_spin_keys
+    keys = {_spin_key(s) for s in spins if s.get("artist") or s.get("song")}
+    if seen_spin_keys is not None:
+        new_keys = keys - seen_spin_keys
+        if new_keys:
+            for s in spins:
+                if _spin_key(s) in new_keys:
+                    print(f"  ♫ on air: {_format_spin(s)}")
+    return keys
+
+
 def main():
     print(f"wtul-rip watching {DEV}. Press 'h' for history, 's' for status, "
-          f"'e' to eject, 'fix <discid>' to relabel a past disc, 'q' to quit.\n")
+          f"'e' to eject, 'spins' to check Spinitron now, 'fix <discid>' to "
+          f"relabel a past disc, 'q' to quit.\n")
     last_seen_empty = True
+    seen_spin_keys = None
+    last_spin_check = 0.0
     # Once stdin hits EOF it stays readable forever, and select() returns
     # immediately every time - so watching it would spin this loop at 100%
     # CPU instead of polling the drive every POLL_SECS. That's what happens
@@ -875,9 +926,23 @@ def main():
                 sh(["eject", DEV])
                 print(f"Ejected {DEV}.")
                 last_seen_empty = True
+            elif low == "spins":
+                last_spin_check = time.time()
+                seen_spin_keys = check_for_new_spins(seen_spin_keys, quiet_errors=False)
+                if seen_spin_keys is not None and not seen_spin_keys:
+                    print("  (no spins found on the public page yet)")
             elif low.startswith("fix "):
                 fix_by_discid(cmd.split(None, 1)[1].strip())
             continue
+
+        # Best-effort live "already played on air" signal while idling
+        # between discs - same source rip_session() checks once per disc,
+        # just surfaced continuously instead of only at rip-queue-build
+        # time. Never raises; a scrape failure just skips this tick.
+        now = time.time()
+        if now - last_spin_check >= SPIN_POLL_SECS:
+            last_spin_check = now
+            seen_spin_keys = check_for_new_spins(seen_spin_keys)
 
         n = disc_audio_track_count(DEV)
         if n <= 0:

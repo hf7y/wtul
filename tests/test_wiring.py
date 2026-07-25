@@ -83,3 +83,67 @@ def test_earcon_disabled_via_env_var(monkeypatch, capsys):
     mod = _load_wtul_rip(monkeypatch)
     mod.earcon()
     assert capsys.readouterr().out == ""
+
+
+def test_spin_poll_secs_defaults_and_env_override(monkeypatch):
+    monkeypatch.delenv("WTUL_SPIN_POLL_SECS", raising=False)
+    mod = _load_wtul_rip(monkeypatch)
+    assert mod.SPIN_POLL_SECS == 60
+
+    monkeypatch.setenv("WTUL_SPIN_POLL_SECS", "15")
+    mod = _load_wtul_rip(monkeypatch)
+    assert mod.SPIN_POLL_SECS == 15
+
+
+def test_spin_poll_secs_falls_back_on_malformed_env_var(monkeypatch):
+    monkeypatch.setenv("WTUL_SPIN_POLL_SECS", "not-a-number")
+    mod = _load_wtul_rip(monkeypatch)
+    assert mod.SPIN_POLL_SECS == 60
+
+
+def test_check_for_new_spins_seeds_silently_on_first_call(monkeypatch, capsys):
+    mod = _load_wtul_rip(monkeypatch)
+    monkeypatch.setattr(
+        mod.spinitron, "fetch_recent_spins_public",
+        lambda: [{"artist": "Talking Heads", "song": "Once in a Lifetime"}],
+    )
+    keys = mod.check_for_new_spins(None)
+    assert keys == {("Talking Heads", "Once in a Lifetime")}
+    assert capsys.readouterr().out == ""
+
+
+def test_check_for_new_spins_prints_only_newly_seen(monkeypatch, capsys):
+    mod = _load_wtul_rip(monkeypatch)
+    seen = {("Talking Heads", "Once in a Lifetime")}
+    monkeypatch.setattr(
+        mod.spinitron, "fetch_recent_spins_public",
+        lambda: [
+            {"artist": "Talking Heads", "song": "Once in a Lifetime"},
+            {"artist": "Devo", "song": "Whip It"},
+        ],
+    )
+    keys = mod.check_for_new_spins(seen)
+    assert keys == {
+        ("Talking Heads", "Once in a Lifetime"),
+        ("Devo", "Whip It"),
+    }
+    out = capsys.readouterr().out
+    assert "Devo - Whip It" in out
+    assert "Talking Heads" not in out
+
+
+def test_check_for_new_spins_never_raises_on_fetch_failure(monkeypatch, capsys):
+    mod = _load_wtul_rip(monkeypatch)
+
+    def boom():
+        raise mod.urllib.error.URLError("no network")
+
+    monkeypatch.setattr(mod.spinitron, "fetch_recent_spins_public", boom)
+    seen = {("Devo", "Whip It")}
+    keys = mod.check_for_new_spins(seen)
+    assert keys is seen
+    assert capsys.readouterr().out == ""
+
+    keys = mod.check_for_new_spins(seen, quiet_errors=False)
+    assert keys is seen
+    assert "spin check failed" in capsys.readouterr().out
