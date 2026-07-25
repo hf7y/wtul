@@ -149,6 +149,54 @@ def discogs_search_by_artist(token, artist, base_url=DISCOGS_SEARCH_URL, timeout
     return top.get("title") if isinstance(top, dict) else None
 
 
+def discogs_genre_year(token, artist, album=None, base_url=DISCOGS_SEARCH_URL, timeout=15):
+    """Best-effort (genre, year) for a label, not disc identification -
+    genre/year aren't tagged by abcde's CDDB/MusicBrainz scrape at all, so
+    this is the only source for them. Searches by artist+release_title
+    when an album is already known (far more specific than artist alone -
+    e.g. "belong"+"October Language" only matches that release, not
+    whichever of an artist's releases Discogs ranks first), falling back
+    to artist-only if that finds nothing (matches
+    `discogs_search_by_artist`'s existing fallback shape) - **except for a
+    self-titled album** (album == artist, common for a debut), where the
+    artist-only fallback is skipped entirely: it's no more specific than
+    the release_title search that already failed, but still returns a
+    top result with false confidence - real collision hit live 2026-07-24
+    (an obscure local "Morgan Lane" self-titled release matched an
+    unrelated same-named artist's 1971 country record). Returns
+    (None, None) on no match/error - a blank label field beats a
+    confidently-wrong or generic one, so callers should leave the field
+    blank (for a human to write in by hand) rather than substitute a
+    placeholder."""
+    self_titled = bool(album) and album.strip().lower() == artist.strip().lower()
+    searches = []
+    if album:
+        searches.append({"artist": artist, "release_title": album, "type": "release", "token": token})
+    if not self_titled:
+        searches.append({"artist": artist, "type": "release", "token": token})
+    for params in searches:
+        req = urllib.request.Request(f"{base_url}?{urllib.parse.urlencode(params)}",
+                                      headers={"User-Agent": "wtul-rip/1.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        except (urllib.error.URLError, OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        results = data.get("results", []) or []
+        if not results:
+            continue
+        top = results[0]
+        if not isinstance(top, dict):
+            continue
+        genre = ", ".join((top.get("style") or top.get("genre") or [])[:2]) or None
+        year = top.get("year") or None
+        if genre or year:
+            return genre, year
+    return None, None
+
+
 def resolve_disc_metadata(track_paths, acoustid_key=None, discogs_token=None,
                            fpcalc_bin="fpcalc", min_interval=ACOUSTID_MIN_INTERVAL,
                            sleep_fn=time.sleep, clock=time.monotonic):

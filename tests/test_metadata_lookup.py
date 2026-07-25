@@ -167,6 +167,51 @@ def test_discogs_search_by_artist_non_dict_result_entry_returns_none():
         assert ml.discogs_search_by_artist("token", "Nobody") is None
 
 
+def test_discogs_genre_year_prefers_release_title_match():
+    body = {"results": [{"style": ["Shoegaze", "Drone", "Ambient"], "genre": ["Electronic"], "year": "2009"}]}
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse(body)) as mocked:
+        genre, year = ml.discogs_genre_year("token", "belong", album="October Language")
+    assert genre == "Shoegaze, Drone"
+    assert year == "2009"
+    # release_title search matched first try - only one request made, no artist-only fallback needed.
+    assert mocked.call_count == 1
+
+
+def test_discogs_genre_year_falls_back_to_artist_only():
+    responses = [_FakeResponse({"results": []}), _FakeResponse({"results": [{"genre": ["Jazz"], "year": "1975"}]})]
+    with patch.object(ml.urllib.request, "urlopen", side_effect=responses):
+        genre, year = ml.discogs_genre_year("token", "Fela Kuti", album="Unmatched Title")
+    assert genre == "Jazz"
+    assert year == "1975"
+
+
+def test_discogs_genre_year_skips_artist_only_fallback_for_self_titled_album():
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse({"results": []})) as mocked:
+        genre, year = ml.discogs_genre_year("token", "Morgan Lane", album="Morgan Lane")
+    assert (genre, year) == (None, None)
+    # only the release_title search ran - no artist-only fallback for a self-titled album.
+    assert mocked.call_count == 1
+
+
+def test_discogs_genre_year_no_match_returns_none_none():
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse({"results": []})):
+        genre, year = ml.discogs_genre_year("token", "Nobody")
+    assert genre is None
+    assert year is None
+
+
+def test_discogs_genre_year_non_dict_json_returns_none_none():
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse("oops")):
+        genre, year = ml.discogs_genre_year("token", "Nobody", album="Anything")
+    assert (genre, year) == (None, None)
+
+
+def test_discogs_genre_year_non_dict_result_entry_returns_none_none():
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse({"results": ["oops"]})):
+        genre, year = ml.discogs_genre_year("token", "Nobody")
+    assert (genre, year) == (None, None)
+
+
 def test_resolve_disc_metadata_no_key_is_noop():
     assert ml.resolve_disc_metadata(["/a.mp3"], acoustid_key=None) == (None, None)
 
