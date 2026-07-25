@@ -72,6 +72,15 @@ def test_check_photo_network_error_returns_none():
         assert pc.check_photo("https://example.com/exec", "abc123") is None
 
 
+def test_check_photo_non_dict_json_returns_none():
+    # A GAS script error/misconfiguration can return valid JSON that
+    # isn't an object (bare string, null, list) - must not crash callers
+    # that immediately do `result.get("found")`.
+    for body in ["error", None, [], False, 0]:
+        with patch.object(pc.urllib.request, "urlopen", return_value=_FakeResponse(body)):
+            assert pc.check_photo("https://example.com/exec", "abc123") is None
+
+
 def test_wait_for_photo_returns_immediately_when_found():
     body = {"found": True, "url": "https://drive.example/x"}
     sleeps = []

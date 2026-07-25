@@ -56,14 +56,24 @@ def check_photo(exec_url, pairing_code, timeout=15):
     never-trust-the-response caution documented in `INTAKE.md` for
     *writes* against Apps-Script-backed endpoints - reads are a plain
     JSON response, not a redirect-chain'd POST, so this one's safe to
-    trust directly."""
+    trust directly.
+
+    Also guards against well-formed-but-wrong-shaped JSON: a GAS script
+    error/misconfiguration can return valid JSON that isn't an object
+    (e.g. a bare string, `null`, or a list) - `json.loads` alone wouldn't
+    catch that (it's not a parse failure), but every caller here
+    immediately does `result.get("found")`, which would raise
+    AttributeError on anything non-dict and crash the whole interactive
+    session (this is called from `check_pending_photos()`'s poll loop in
+    `bin/wtul-rip`, not just at arm's length behind a try/except)."""
     query = urllib.parse.urlencode({"scope": "photo", "pairing_code": pairing_code})
     try:
         req = urllib.request.Request(f"{exec_url}?{query}")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8", errors="replace"))
+            parsed = json.loads(resp.read().decode("utf-8", errors="replace"))
     except (urllib.error.URLError, OSError, ValueError):
         return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def wait_for_photo(exec_url, pairing_code, timeout=180, interval=5, sleep=time.sleep):
