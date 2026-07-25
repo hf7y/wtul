@@ -200,7 +200,13 @@ def _silent_mp3(seconds):
     frame_secs = 1152 / 44100.0
     # Cap the file size: a 5-minute track at real length is pointless bulk
     # for a rehearsal, and the tag/length plumbing is identical either way.
-    count = max(1, min(int(seconds / frame_secs), 400))
+    # Floor of 32 frames, not 1: mutagen needs several consecutive frames to
+    # sync before it will report a length at all, so a 0:00 track (a spec
+    # typo, or a real disc's stub/silent index track) otherwise wrote a
+    # 104-byte file that raised HeaderNotFoundError the moment history() or
+    # retag_mp3() touched it - the rehearsal failing on its own placeholder
+    # rather than on anything real. Found by the 2026-07-25 stress pass.
+    count = max(32, min(int(seconds / frame_secs), 400))
     return frame * count
 
 
@@ -222,6 +228,7 @@ class FakeDrive:
         self.tempdir = None
         self.ripped = []          # track numbers this rehearsal wrote
         self.ejected = False
+        self._scrapes = 0         # keeps each scrape's tempdir distinct
 
     # -- description -----------------------------------------------------
 
@@ -345,9 +352,14 @@ class FakeDrive:
         """Create abcde's scratch dir the way `-a cddb` does, and return the
         output lines it prints while doing it."""
         os.makedirs(self.ripdir, exist_ok=True)
-        # Real abcde names this abcde.<random>; mtime is what
-        # newest_abcde_tempdir() sorts on, so uniqueness is all that matters.
-        self.tempdir = os.path.join(self.ripdir, f"abcde.sim{os.getpid()}")
+        # Real abcde names this abcde.<random> and makes a fresh one per
+        # scrape; mtime is what newest_abcde_tempdir() sorts on, so the names
+        # only have to be distinct. The counter matters because two discs
+        # rehearsed in one process would otherwise share one scratch dir and
+        # the second would silently inherit the first's cddbread.
+        self._scrapes += 1
+        self.tempdir = os.path.join(
+            self.ripdir, f"abcde.sim{os.getpid()}-{self._scrapes}")
         os.makedirs(self.tempdir, exist_ok=True)
 
         s = self.spec

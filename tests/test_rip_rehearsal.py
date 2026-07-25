@@ -324,3 +324,117 @@ def test_catalog_writeback_fires_only_on_a_complete_disc(monkeypatch, tmp_path):
     assert len(calls2) == 1
     assert calls2[0]["ARTIST"] == "Belong"
     assert calls2[0]["LOCAL"] is True
+
+
+# -- `fix <discid>` on a rehearsed unidentified disc ---------------------
+#
+# This is the other stability-milestone criterion's logic (#2's metadata-fix
+# path). It had no coverage either, for the same reason: producing an
+# "Unknown Album (discid)" folder to fix needed a real unidentified disc.
+# The AcoustID/Discogs lookup itself is injected here - it is a real network
+# call in production and already live-verified separately.
+
+
+def _rehearse_unidentified(monkeypatch, tmp_path):
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path, match=False))
+    assert mod.rip_session(mod.DEV) is True
+    return mod
+
+
+def test_fix_by_discid_finds_the_rehearsed_unknown_disc(monkeypatch, tmp_path, capsys):
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    monkeypatch.setattr("builtins.input", lambda *a: "")
+    mod.ACOUSTID_API_KEY = ""
+    mod.fix_by_discid("700a8608")
+    out = capsys.readouterr().out
+    assert "Unknown Album (700a8608)" in out
+    # No album given and no suggestion available -> refuses to guess.
+    assert "No album given" in out
+
+
+def test_fix_by_discid_applies_a_manual_correction(monkeypatch, tmp_path, capsys):
+    pytest.importorskip("mutagen")
+    from mutagen.easyid3 import EasyID3
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.ACOUSTID_API_KEY = ""
+    answers = iter(["Real Artist", "Real Album"])
+    monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+    mod.fix_by_discid("700a8608")
+
+    new_dir = os.path.join(mod.RIPDIR, "Real Artist", "Real Album")
+    assert os.path.isdir(new_dir), os.listdir(mod.RIPDIR)
+    files = sorted(os.listdir(new_dir))
+    assert len(files) == 3, files
+    tags = EasyID3(os.path.join(new_dir, files[0]))
+    assert tags["artist"] == ["Real Artist"]
+    assert tags["album"] == ["Real Album"]
+    # The old Unknown folder should not be left behind alongside the fixed one.
+    assert not os.path.isdir(os.path.join(mod.RIPDIR, "Unknown Artist",
+                                          "Unknown Album (700a8608)"))
+
+
+def test_fix_by_discid_accepts_a_suggestion_on_blank_input(monkeypatch, tmp_path, capsys):
+    """#2's confirm/edit discipline: a fuzzy match is offered, never applied
+    blind, and blank input is what accepts it."""
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.ACOUSTID_API_KEY = "test-key"
+    monkeypatch.setattr(mod.metadata_lookup, "resolve_disc_metadata",
+                        lambda *a, **k: ("Suggested Artist", "Suggested Album"))
+    monkeypatch.setattr("builtins.input", lambda *a: "")
+    mod.fix_by_discid("700a8608")
+    out = capsys.readouterr().out
+    assert "suggestion: Suggested Artist - Suggested Album" in out
+    assert "unverified match" in out
+    assert os.path.isdir(os.path.join(mod.RIPDIR, "Suggested Artist",
+                                      "Suggested Album"))
+
+
+def test_fix_by_discid_typed_input_overrides_the_suggestion(monkeypatch, tmp_path, capsys):
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.ACOUSTID_API_KEY = "test-key"
+    monkeypatch.setattr(mod.metadata_lookup, "resolve_disc_metadata",
+                        lambda *a, **k: ("Wrong Guess", "Wrong Album"))
+    answers = iter(["Actually This", "And This"])
+    monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+    mod.fix_by_discid("700a8608")
+    assert os.path.isdir(os.path.join(mod.RIPDIR, "Actually This", "And This"))
+    assert not os.path.isdir(os.path.join(mod.RIPDIR, "Wrong Guess", "Wrong Album"))
+
+
+def test_fix_by_discid_on_an_unknown_discid_says_so(monkeypatch, tmp_path, capsys):
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.fix_by_discid("deadbeef")
+    assert "No ripped album found" in capsys.readouterr().out
+
+
+def test_fix_by_discid_survives_a_failing_lookup(monkeypatch, tmp_path, capsys):
+    """A network/fpcalc failure during the suggestion step must still leave
+    manual entry usable, not abort the fix."""
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.ACOUSTID_API_KEY = "test-key"
+    monkeypatch.setattr(mod.metadata_lookup, "resolve_disc_metadata",
+                        lambda *a, **k: (None, None))
+    answers = iter(["Hand Typed", "Hand Album"])
+    monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+    mod.fix_by_discid("700a8608")
+    out = capsys.readouterr().out
+    assert "no confident match" in out
+    assert os.path.isdir(os.path.join(mod.RIPDIR, "Hand Typed", "Hand Album"))
+
+
+def test_history_lists_the_rehearsed_disc(monkeypatch, tmp_path, capsys):
+    pytest.importorskip("mutagen")
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    mod.rip_session(mod.DEV)
+    capsys.readouterr()
+    mod.history()
+    out = capsys.readouterr().out
+    assert "Belong" in out
+    # The rehearsal's own session log must read as simulated here too.
+    assert "SIMULATED" in out

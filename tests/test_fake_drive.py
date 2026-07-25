@@ -344,3 +344,145 @@ def test_banner_says_rehearsal_and_not_verification(tmp_path):
     banner = d.banner()
     assert "REHEARSAL" in banner
     assert "does NOT count as hardware verification" in banner
+
+
+# -- edge cases / malformed input (stress pass, 2026-07-25) --------------
+
+
+def test_tracks_as_a_dict_instead_of_a_list_is_an_error():
+    with pytest.raises(fake_drive.SpecError):
+        _parse(_spec(tracks={"1": "a"}))
+
+
+def test_null_track_entry_is_an_error():
+    with pytest.raises(fake_drive.SpecError):
+        _parse(_spec(tracks=[None]))
+
+
+def test_numeric_track_entry_is_an_error():
+    with pytest.raises(fake_drive.SpecError):
+        _parse(_spec(tracks=[42]))
+
+
+def test_missing_tracks_key_entirely_is_an_error():
+    spec = _spec()
+    del spec["tracks"]
+    with pytest.raises(fake_drive.SpecError):
+        _parse(spec)
+
+
+def test_seconds_over_59_in_a_length_is_an_error():
+    with pytest.raises(fake_drive.SpecError):
+        _parse(_spec(tracks=[{"title": "x", "length": "3:75"}]))
+
+
+def test_negative_length_is_an_error():
+    with pytest.raises(fake_drive.SpecError):
+        _parse(_spec(tracks=[{"title": "x", "length": "-1:00"}]))
+
+
+def test_length_may_carry_a_frames_component():
+    """cdparanoia prints MM:SS.FF; accepting that shape means a spec can be
+    pasted straight from a real TOC dump."""
+    spec = _parse(_spec(tracks=[{"title": "x", "length": "3:55.20"}]))
+    assert spec["tracks"][0]["seconds"] == 235
+
+
+def test_uppercase_discid_is_accepted_and_normalised():
+    """abcde/cd-discid emit lowercase hex; a hand-written spec may not, and
+    the discid ends up in a folder name, so it has to be one or the other."""
+    assert _parse(_spec(discid="700A8608"))["discid"] == "700a8608"
+
+
+def test_discid_of_wrong_length_is_an_error():
+    with pytest.raises(fake_drive.SpecError):
+        _parse(_spec(discid="700a860"))
+
+
+def test_zero_length_track_still_produces_a_valid_mp3(tmp_path):
+    pytest.importorskip("mutagen")
+    from mutagen.mp3 import MP3
+    d, ripdir = _drive(tmp_path, tracks=[{"title": "Silence", "length": "0:00"}])
+    assert d.run(_rip_cmd(1))[0] == 0
+    path = os.path.join(ripdir, "Belong", "October Language", "01-Silence.mp3")
+    assert MP3(path).info.length > 0
+
+
+def test_long_track_does_not_produce_an_enormous_file(tmp_path):
+    """A rehearsal shouldn't write a real-size file per track - the tag and
+    length plumbing is identical either way."""
+    d, ripdir = _drive(tmp_path, tracks=[{"title": "Epic", "length": "45:00"}])
+    d.run(_rip_cmd(1))
+    path = os.path.join(ripdir, "Belong", "October Language", "01-Epic.mp3")
+    assert os.path.getsize(path) < 100_000
+
+
+def test_unicode_track_title_round_trips(tmp_path):
+    pytest.importorskip("mutagen")
+    from mutagen.easyid3 import EasyID3
+    title = "Björk – Jóga (ﬂ)"
+    d, ripdir = _drive(tmp_path, tracks=[{"title": title, "length": "2:00"}])
+    assert d.run(_rip_cmd(1))[0] == 0
+    album_dir = os.path.join(ripdir, "Belong", "October Language")
+    path = os.path.join(album_dir, os.listdir(album_dir)[0])
+    assert EasyID3(path)["title"] == [title]
+
+
+def test_a_99_track_disc_scrapes_and_tocs_consistently(tmp_path):
+    """CD-DA's real ceiling is 99 tracks; the TOC and cddbread have to agree
+    on the count or the tracklist and the rip queue disagree."""
+    tracks = [{"title": f"T{i}", "length": "0:30"} for i in range(1, 100)]
+    d, _ = _drive(tmp_path, tracks=tracks)
+    d.run(["abcde", "-N", "-d", "/dev/sr0", "-a", "cddb"])
+    parts = open(os.path.join(d.tempdir, "cddbdiscid")).read().split()
+    assert int(parts[1]) == 99
+    body = open(os.path.join(d.tempdir, "cddbread.1")).read()
+    assert "TTITLE98=T99" in body
+    _, toc = d.run(["cdparanoia", "-Q", "-d", "/dev/sr0"])
+    assert " 99. " in toc
+
+
+def test_two_scrapes_get_distinct_tempdirs(tmp_path):
+    """newest_abcde_tempdir() picks by mtime; reusing one dir would let a
+    second disc silently inherit the first's cddbread."""
+    d, _ = _drive(tmp_path)
+    d.run(["abcde", "-N", "-d", "/dev/sr0", "-a", "cddb"])
+    first = d.tempdir
+    d.run(["abcde", "-N", "-d", "/dev/sr0", "-a", "cddb"])
+    assert d.tempdir != first
+
+
+def test_track_title_that_is_only_hostile_characters_still_yields_a_filename(tmp_path):
+    """mungefilename could strip a title down to nothing; the result still
+    has to match find_track_file's ^0*N- pattern."""
+    import re
+    d, ripdir = _drive(tmp_path, tracks=[{"title": '"?', "length": "1:00"}])
+    assert d.run(_rip_cmd(1))[0] == 0
+    names = os.listdir(os.path.join(ripdir, "Belong", "October Language"))
+    assert any(re.match(r"^0*1-.*\.mp3$", n) for n in names), names
+
+
+def test_blank_album_is_treated_as_unknown(tmp_path):
+    d, ripdir = _drive(tmp_path, album="   ")
+    d.run(_rip_cmd(1))
+    assert os.path.isdir(os.path.join(ripdir, "Belong",
+                                      "Unknown Album (700a8608)"))
+
+
+def test_streaming_a_non_rip_command_still_works(tmp_path):
+    """stream() is only ever called with a rip today; doing nothing useful on
+    another command would be a silent trap for a future caller."""
+    d, _ = _drive(tmp_path)
+    rc, lines = d.stream(["cdparanoia", "-Q", "-d", "/dev/sr0"])
+    assert rc == 0 and any("[" in l for l in lines)
+
+
+def test_streaming_an_unhandled_command_raises(tmp_path):
+    d, _ = _drive(tmp_path)
+    with pytest.raises(fake_drive.SpecError):
+        d.stream(["fpcalc", "x.mp3"])
+
+
+def test_timeout_wrapper_with_no_inner_command_is_not_claimed(tmp_path):
+    d, _ = _drive(tmp_path)
+    assert not d.handles(["timeout", "900"])
