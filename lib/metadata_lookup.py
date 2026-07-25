@@ -51,6 +51,8 @@ def fingerprint_file(path, fpcalc_bin="fpcalc", timeout=30):
         data = json.loads(proc.stdout)
     except ValueError:
         return None, None
+    if not isinstance(data, dict):
+        return None, None
     return data.get("duration"), data.get("fingerprint")
 
 
@@ -71,7 +73,7 @@ def acoustid_lookup(api_key, duration, fingerprint, base_url=ACOUSTID_URL, timeo
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
     except (urllib.error.URLError, OSError, ValueError):
         return []
-    if data.get("status") != "ok":
+    if not isinstance(data, dict) or data.get("status") != "ok":
         return []
     guesses = []
     for result in data.get("results", []) or []:
@@ -135,8 +137,11 @@ def discogs_search_by_artist(token, artist, base_url=DISCOGS_SEARCH_URL, timeout
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
     except (urllib.error.URLError, OSError, ValueError):
         return None
+    if not isinstance(data, dict):
+        return None
     results = data.get("results", []) or []
-    return results[0].get("title") if results else None
+    top = results[0] if results else None
+    return top.get("title") if isinstance(top, dict) else None
 
 
 def resolve_disc_metadata(track_paths, acoustid_key=None, discogs_token=None,

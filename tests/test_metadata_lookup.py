@@ -59,6 +59,14 @@ def test_fingerprint_file_nonzero_exit_returns_none():
         assert ml.fingerprint_file("/fake/track.mp3") == (None, None)
 
 
+def test_fingerprint_file_non_dict_json_returns_none():
+    # Well-formed JSON that isn't an object (e.g. a fpcalc build with a
+    # broken/changed output shape) shouldn't crash the per-track loop.
+    fake = _FakeCompletedProcess(0, json.dumps([1, 2, 3]))
+    with patch.object(ml.subprocess, "run", return_value=fake):
+        assert ml.fingerprint_file("/fake/track.mp3") == (None, None)
+
+
 def test_acoustid_lookup_parses_results():
     body = {
         "status": "ok",
@@ -84,6 +92,11 @@ def test_acoustid_lookup_no_match_returns_empty():
 
 def test_acoustid_lookup_network_error_returns_empty():
     with patch.object(ml.urllib.request, "urlopen", side_effect=OSError("boom")):
+        assert ml.acoustid_lookup("key", 300, "fp") == []
+
+
+def test_acoustid_lookup_non_dict_json_returns_empty():
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse(["oops"])):
         assert ml.acoustid_lookup("key", 300, "fp") == []
 
 
@@ -114,6 +127,16 @@ def test_discogs_search_by_artist_returns_top_result():
 
 def test_discogs_search_by_artist_no_results():
     with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse({"results": []})):
+        assert ml.discogs_search_by_artist("token", "Nobody") is None
+
+
+def test_discogs_search_by_artist_non_dict_json_returns_none():
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse("oops")):
+        assert ml.discogs_search_by_artist("token", "Nobody") is None
+
+
+def test_discogs_search_by_artist_non_dict_result_entry_returns_none():
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse({"results": ["oops"]})):
         assert ml.discogs_search_by_artist("token", "Nobody") is None
 
 

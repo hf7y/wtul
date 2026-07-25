@@ -145,5 +145,13 @@ def fetch_recent_spins_public(url=DEFAULT_PUBLIC_URL, timeout=15):
             spin = json.loads(html.unescape(raw))
         except ValueError:
             continue
+        if not isinstance(spin, dict):
+            # A page layout tweak could embed a non-object data-spin value
+            # (still valid JSON, so the except above wouldn't catch it) -
+            # spin.get() would raise AttributeError, which isn't in the
+            # caller's caught-exceptions tuple in bin/wtul-rip and would
+            # crash rip_session entirely over what's meant to be a
+            # best-effort, informational-only lookup.
+            continue
         spins.append({"artist": spin.get("a", ""), "song": spin.get("s", "")})
     return spins

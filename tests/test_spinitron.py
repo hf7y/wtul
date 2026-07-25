@@ -118,3 +118,12 @@ def test_fetch_recent_spins_public_parses_data_spin_attrs():
 def test_fetch_recent_spins_public_no_spins_on_page():
     with patch.object(sp.urllib.request, "urlopen", return_value=_FakeResponse("<html></html>")):
         assert sp.fetch_recent_spins_public() == []
+
+
+def test_fetch_recent_spins_public_skips_non_dict_data_spin():
+    # A page layout tweak could embed well-formed JSON that isn't an
+    # object (e.g. data-spin="123") - json.loads wouldn't raise, but
+    # spin.get() on it would if not guarded.
+    page = '<tr data-spin="123"></tr><tr data-spin="{&quot;a&quot;:&quot;X&quot;,&quot;s&quot;:&quot;Y&quot;}"></tr>'
+    with patch.object(sp.urllib.request, "urlopen", return_value=_FakeResponse(page)):
+        assert sp.fetch_recent_spins_public() == [{"artist": "X", "song": "Y"}]
