@@ -819,10 +819,29 @@ def main():
     print(f"wtul-rip watching {DEV}. Press 'h' for history, 's' for status, "
           f"'e' to eject, 'fix <discid>' to relabel a past disc, 'q' to quit.\n")
     last_seen_empty = True
+    # Once stdin hits EOF it stays readable forever, and select() returns
+    # immediately every time - so watching it would spin this loop at 100%
+    # CPU instead of polling the drive every POLL_SECS. That's what happens
+    # to anyone who runs wtul-rip with stdin redirected (`</dev/null`,
+    # nohup, a wrapper script, a rehearsal driven from a batch job) rather
+    # than from a terminal. Dropping stdin from the select set keeps the
+    # drive-watching half working headless; the interactive commands are
+    # simply unavailable, which is already true of a closed stdin.
+    watch_stdin = True
     while True:
-        r, _, _ = select.select([sys.stdin], [], [], POLL_SECS)
+        r = []
+        if watch_stdin:
+            r, _, _ = select.select([sys.stdin], [], [], POLL_SECS)
+        else:
+            time.sleep(POLL_SECS)
         if r:
-            cmd = sys.stdin.readline().strip()
+            raw = sys.stdin.readline()
+            if raw == "":
+                print("(stdin closed - still watching the drive, but keyboard "
+                      "commands are off for the rest of this run.)")
+                watch_stdin = False
+                continue
+            cmd = raw.strip()
             low = cmd.lower()
             if low in ("q", "!q"):
                 return
@@ -857,11 +876,20 @@ def main():
             # (which is what would happen if we just went back to polling,
             # since the disc never leaves and never re-triggers).
             while not done:
-                choice = input(
-                    "\nDisc left in drive. Press Enter to retry (e.g. to "
-                    "recheck Spinitron), 'e' to eject, or 'q' to give up "
-                    "on this disc: "
-                ).strip().lower()
+                try:
+                    choice = input(
+                        "\nDisc left in drive. Press Enter to retry (e.g. to "
+                        "recheck Spinitron), 'e' to eject, or 'q' to give up "
+                        "on this disc: "
+                    ).strip().lower()
+                except EOFError:
+                    # Same headless case as the select() loop above: there is
+                    # nobody to answer the prompt. Give up on this disc and go
+                    # back to watching, rather than dying on a traceback with
+                    # a half-ripped disc still in the drive.
+                    print("\n(stdin closed - leaving the disc in the drive, "
+                          "not retrying.)")
+                    break
                 if choice == "q":
                     break
                 if choice == "e":
