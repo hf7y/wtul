@@ -200,3 +200,24 @@ hand.
   still hardware-gated: a real disc's real cover photo, which needs #4's
   live phone-capture flow. No decision needed from you; this is a status
   correction, not a new feature.
+- **2026-07-25 (wtul-batch):** No new feature built this round - both
+  remaining stability-milestone criteria (rip-speed monitoring merge,
+  Discogs metadata-fix live-verify) are still gated on a real rip, and
+  the rest of the backlog (#9, #10) needs the user's own decision
+  already flagged in earlier entries below. Spent the round on step 2/4
+  (re-verify from scratch + stress-test) instead: re-ran every one of
+  the 7 unmerged feature branches' own test suites (not trusted from
+  prior runs' claims - all green), then found and fixed 3 more real
+  "well-formed-but-wrong-shaped/malformed-input" bugs in the same class
+  the prior round caught (`lib/metadata_lookup.py`'s `acoustid_lookup`
+  didn't validate nested list entries inside `results`/`recordings`/
+  `artists`/`releasegroups`, `bin/wtul-rip`'s `read_toc_discid` assumed
+  the TOC track count was always numeric, `lib/photo_capture.py`'s
+  `associate_photo` subscripted a possibly-`url`-less response dict).
+  All 3 fixed with regression tests, no hands-on hardware verification
+  needed for any of them (pure parsing/shape-guard logic). All 7
+  branches rebased onto `main`'s new tip and re-pushed (force, since
+  rebase rewrites history) so branch health stays 0-behind - see
+  `~/reports/wtul/2026-07-25.md` for exact tip SHAs and pre-rebase SHAs
+  to revert to if needed. No decision needed from you; this round was
+  routine upkeep, not a new judgment call.

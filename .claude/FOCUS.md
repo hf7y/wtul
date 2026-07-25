@@ -62,6 +62,21 @@ just the live-test bug fixes - anything in those branches assuming
 See `LIVE-TEST-DEBRIEF-2026-07-24.md` for the full session debrief this
 was drawn from.
 
+**Update (2026-07-25, wtul-batch stress-test round):** all 7 unmerged
+feature branches (`detection-failure-earcon`, `discid-rerip-cache`,
+`label-printer-integration`, `rip-speed-monitoring`, `spin-live-watch`,
+`web-photo-capture`, `ocr-metadata-extraction`) re-verified from scratch
+(each branch's own test suite re-run, not trusted from a prior run's
+claim) and rebased onto `main`'s new tip, all green - see
+`~/reports/wtul/2026-07-25.md` for tip SHAs. No milestone-criterion
+status change (both remaining criteria are still gated on a real rip);
+this was routine branch-health upkeep plus 3 more well-formed-but-wrong-
+shaped/malformed-input bugs found and fixed the same way as the prior
+round's `spinitron`/`catalog_writeback` guards
+(`lib/metadata_lookup.py`'s `acoustid_lookup` nested-list shape,
+`bin/wtul-rip`'s `read_toc_discid` non-numeric track count,
+`lib/photo_capture.py`'s `associate_photo` missing-`url` response).
+
 *(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
 it doesn't fit wtul's own read of its bar.)*
 
