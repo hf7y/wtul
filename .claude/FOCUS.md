@@ -104,6 +104,44 @@ burned; session logs are named `-SIMULATED` so `history()` can't read one
 as a real rip; a separate lockfile keeps it clear of a real rip. A bad
 spec exits rather than falling back to the real drive.
 
+**Update (2026-07-25, run 18): two real bugs found and fixed on `main`,
+both in code a real rip runs every time.**
+
+1. **`album_dir_path()` didn't mirror `abcde.conf`'s `mungefilename()`**
+   (`c3e2988`, merged to `main`). abcde maps `:` to `-` and deletes `'`,
+   `"`, `?` and control characters from every path component before
+   writing; wtul-rip predicted the *unstripped* folder. So for any disc
+   whose metadata carries one of those - "It's Alive", "Songs: Ohia",
+   "Who's Next?", i.e. a large share of real records - wtul-rip was
+   looking in a directory abcde had never created. Nothing raised;
+   three separate features just quietly did nothing: resume-skip re-ripped
+   every track on reinsert, `find_track_file()` never populated `ripped`
+   so live `artist=`/`album=`/`N=Title` edits couldn't retag what was
+   already on disk, and `retag_ripped_tracks()` moved files to a second
+   wrong folder. `fix_by_discid()` built its destination the same way.
+   The tests don't re-type the rule - they source `abcde.conf` and run the
+   real shell function, so the conf stays single-source.
+2. **`wtul-rip` busy-looped at 100% CPU on a non-terminal stdin**
+   (`d02f103`, merged to `main`). An EOF stdin is permanently "readable",
+   so `select()` returned instantly forever instead of polling every
+   `POLL_SECS`; the partial-disc retry prompt below it used a bare
+   `input()` that raised an uncaught `EOFError`. Both now degrade to
+   "keep watching the drive, no keyboard commands". Hit for real while
+   trying to drive a rehearsal from this batch job.
+
+Bug 1 is the more instructive one: **the rehearsal harness could not have
+caught it**, because `FakeDrive` takes its output path *from*
+`album_dir_path()` and so inherited the same wrong rule - harness and code
+agreed with each other while both disagreed with abcde. Found by reading
+`abcde.conf` against the Python instead. The harness has since been
+re-pointed at the real `munge_filename` (`rip-rehearsal-harness`), and its
+new punctuated-disc rehearsal asserts the folder *name*, not just that
+resume works, so agreement-on-a-wrong-answer fails the suite now.
+
+Neither fix needs hardware to verify, and neither clears a hardware gate -
+but both were live in the path a real show-night rip takes, so the next
+real rip should behave better than the last one did.
+
 *(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
 it doesn't fit wtul's own read of its bar.)*
 
@@ -583,4 +621,16 @@ Still needs, before `/wtul-batch` builds anything real:
 <!-- Appended by realisateur/fable-like/inject-suggestions.sh. Full context: fable-like/FABLE_REPORT.md. Triage these like any dated entries; delete freely. -->
 
 - **2026-07-25 (fable-review):** the dexter move's one remaining step is human and unnamed in BLOCKERS — record it precisely: install gh on dexter OR add the deploy key via GitHub web UI; a reverted migration with an unnamed step is a mystery in three weeks
-- **2026-07-25 (fable-review):** keep this FOCUS.md thin but add a comment naming ROADMAP.md as source of truth, so the duplication is never "fixed" by deleting the wrong file
+  - **Triaged 2026-07-25 (wtul-batch): not this repo's.** wtul has no
+    `BLOCKERS` file, no dexter migration and no deploy-key step; the only
+    dexter mention here is #5's Demucs note, a different thing entirely.
+    Left in place rather than deleted so whoever runs the injector can see
+    it landed in the wrong project, but no wtul action follows from it.
+- ~~**2026-07-25 (fable-review):** keep this FOCUS.md thin but add a comment naming ROADMAP.md as source of truth, so the duplication is never "fixed" by deleting the wrong file~~
+  - **Rejected 2026-07-25 (wtul-batch): backwards, and acting on it would
+    have caused the exact damage it warns about.** The 2026-07-24 migration
+    went the other way - `ROADMAP.md` is a retired stub and *this* file is
+    the source of truth. A comment naming ROADMAP.md as canonical would
+    have pointed the next reader, and the next batch run, at the empty
+    file. Struck through rather than deleted so a future run doesn't
+    re-derive the same suggestion from a clean slate and act on it.

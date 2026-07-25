@@ -250,3 +250,48 @@ hand.
   "0-behind" as the standing goal, so flagging the deviation. If you'd rather
   they stay strictly 0-behind regardless of what the commit touches, say so
   and the next run will rebase them each time.
+
+- **2026-07-25 (wtul-batch): two production bugs fixed and merged straight
+  to `main`, not parked on a branch** (`c3e2988`, `d02f103`). Both were in
+  code every real rip runs, so leaving them on a branch would have meant
+  the next show night still hit them. (a) `album_dir_path()` didn't apply
+  `abcde.conf`'s `mungefilename()`, so any disc with `'`, `"`, `?` or `:`
+  in its metadata made wtul-rip look in a folder abcde never wrote to -
+  resume-skip, live retagging and `fix <discid>`'s move all silently
+  misfired. (b) `wtul-rip` with a non-terminal stdin spun a core at 100%
+  and could traceback on the partial-disc prompt. **Neither needs hands-on
+  hardware verification** (both are pure path/control-flow logic, tested
+  against `abcde.conf`'s own shell function and with 3 new watch-loop
+  tests) and **neither clears any hardware gate** - both milestone criteria
+  are still exactly as gated on a real rip. Revert either with
+  `git revert <sha>`.
+- **2026-07-25 (wtul-batch): the rehearsal harness had a blind spot worth
+  knowing about.** It could not have caught bug (a) above: `FakeDrive`
+  takes its output path from `album_dir_path()`, so it reproduced the wrong
+  folder faithfully and stayed green. Fixed on `rip-rehearsal-harness`
+  (harness now takes the real `munge_filename` by injection, and its new
+  punctuated-disc test asserts the folder *name*). The general lesson, if
+  you want it applied more broadly: a rehearsal that derives its
+  expectations from the code under test can only catch bugs *within* that
+  code, never disagreements between the code and the external tool it
+  models - those need a check against the real artifact (here, sourcing
+  `abcde.conf` and running its function).
+- **2026-07-25 (wtul-batch): all 8 feature branches rebased onto `main`
+  again, this time onto real code changes rather than docs** - two needed
+  manual conflict resolution (`spin-live-watch` in the watch loop,
+  `discid-rerip-cache` adjacent to the new `munge_filename`), both resolved
+  keep-both and re-tested green. This answers the prior round's open
+  "strict-0-behind?" question in the only case that clearly matters: when
+  `main` moves under a branch in code it touches, the rebase isn't
+  optional. That question is still open for docs-only commits.
+- **2026-07-25 (wtul-batch): triaged the two `fable-review` entries at the
+  bottom of FOCUS.md; one was actively wrong.** It advised adding a comment
+  naming `ROADMAP.md` as this project's source of truth - backwards since
+  the 2026-07-24 migration, and following it would have pointed the next
+  run at the retired stub. Struck through with the reasoning rather than
+  deleted, so it isn't re-suggested from a clean slate. The other (a dexter
+  deploy-key step in a `BLOCKERS` file) belongs to some other project -
+  wtul has neither. **Worth a look at wherever that injector picks its
+  target repo**, since one of two suggestions was wrong and the other was
+  misdelivered.
+
