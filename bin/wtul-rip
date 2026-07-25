@@ -65,7 +65,14 @@ PER_TRACK_TIMEOUT = 900       # 15 min/track cap - a bad drive can't hang foreve
 MAX_LOG_BYTES = 5_000_000     # matches the old wrapper's runaway-log cap
 POLL_SECS = 2                 # how often we check the drive while idle
 STALE_TEMPDIR_SECS = 6 * 3600 # abandoned rip scratch dirs older than this get pruned
-SPIN_POLL_SECS = int(os.environ.get("WTUL_SPIN_POLL_SECS", "60") or "60")
+def _int_env(name, default):
+    try:
+        return int(os.environ.get(name) or default)
+    except ValueError:
+        return default
+
+
+SPIN_POLL_SECS = _int_env("WTUL_SPIN_POLL_SECS", 60)
 
 
 def sh(cmd, timeout=None):

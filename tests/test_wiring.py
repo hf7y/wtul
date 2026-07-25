@@ -81,6 +81,12 @@ def test_spin_poll_secs_defaults_and_env_override(monkeypatch):
     assert mod.SPIN_POLL_SECS == 15
 
 
+def test_spin_poll_secs_falls_back_on_malformed_env_var(monkeypatch):
+    monkeypatch.setenv("WTUL_SPIN_POLL_SECS", "not-a-number")
+    mod = _load_wtul_rip(monkeypatch)
+    assert mod.SPIN_POLL_SECS == 60
+
+
 def test_check_for_new_spins_seeds_silently_on_first_call(monkeypatch, capsys):
     mod = _load_wtul_rip(monkeypatch)
     monkeypatch.setattr(
