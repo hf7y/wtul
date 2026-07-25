@@ -221,3 +221,32 @@ hand.
   `~/reports/wtul/2026-07-25.md` for exact tip SHAs and pre-rebase SHAs
   to revert to if needed. No decision needed from you; this round was
   routine upkeep, not a new judgment call.
+
+- **2026-07-25 (wtul-batch):** Built the **rehearsal harness** on branch
+  `rip-rehearsal-harness` (`lib/fake_drive.py`): `WTUL_SIMULATE_DRIVE=demo
+  ./bin/wtul-rip` runs a whole rip end to end with **no disc and no drive**,
+  by answering the four hardware commands wtul-rip shells out to from a JSON
+  disc spec. This is what finally gave `rip_session()` test coverage - it had
+  none, because it could only ever run with a real disc. Suite 52 -> 135.
+  **Does NOT need hands-on hardware verification itself** (it deliberately
+  never touches the drive), and it explicitly **does not clear any existing
+  hardware gate** - both stability-milestone criteria are still exactly as
+  gated on a real rip as they were. See FOCUS.md for usage/containment.
+- **2026-07-25 (wtul-batch): ACTION NEEDED, one junk row to delete by hand.**
+  The first real rehearsal run POSTed a fake album to the **live rotation
+  catalog sheet** (#8) before I noticed the gap: sandboxing `RIPDIR` wasn't
+  enough, because `CATALOG_WRITEBACK_URL` comes from
+  `~/.config/wtul/secrets.env` and the write-back fired on a "complete"
+  simulated disc. Now suppressed under rehearsal (with a regression test), but
+  the row that already landed needs deleting manually - #8 deliberately built
+  no delete endpoint. Look for **`Rehearsal Artist` / `Simulated Disc`, dated
+  2026-07-25** on the sheet's LOCAL tab. (Prior hand-verification test rows
+  from 2026-07-20 may still be there too, per #8's own note.)
+- **2026-07-25 (wtul-batch): judgment call for you, not a blocker.** All 7
+  older feature branches are green but sat 1 commit behind `main` this round -
+  and that one commit is **docs-only** (`4b95fe2`, FOCUS/QUESTIONS text). I
+  deliberately did **not** rebase+force-push all 7 to absorb it: that's 7
+  rewritten histories for zero functional change. Prior runs treated
+  "0-behind" as the standing goal, so flagging the deviation. If you'd rather
+  they stay strictly 0-behind regardless of what the commit touches, say so
+  and the next run will rebase them each time.

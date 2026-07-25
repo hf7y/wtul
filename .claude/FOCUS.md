@@ -77,6 +77,33 @@ round's `spinitron`/`catalog_writeback` guards
 `bin/wtul-rip`'s `read_toc_discid` non-numeric track count,
 `lib/photo_capture.py`'s `associate_photo` missing-`url` response).
 
+**Update (2026-07-25, run 17): rehearsal harness built, branch
+`rip-rehearsal-harness`.** The recurring reason nothing moves on this
+milestone unattended is that `rip_session()` — the function that actually
+sequences a rip — can only run with a disc in a real drive, so it had no
+test coverage at all; only its leaf parsers did. `lib/fake_drive.py` now
+answers the four hardware commands `bin/wtul-rip` shells out to
+(`udevadm info`, `cdparanoia -Q`, `abcde -a cddb`, `abcde -a
+read,encode,tag,move N`) from a JSON disc spec.
+
+Usage: `WTUL_SIMULATE_DRIVE=demo ./bin/wtul-rip` for the built-in 3-track
+disc, or point it at a spec file (`etc/rehearsal-disc.example.json` is a
+copyable template; fields: `discid` (8 hex), `artist`, `album`, `match`
+(false → rehearse the Unknown-Album fallback), `disc_present`,
+`read_speed`, and `tracks[]` with `title`/`length` (`M:SS`)/`fails`).
+`WTUL_SIMULATE_ROOT` overrides the sandbox location.
+
+**This does not clear any hardware gate, and no criterion above changed
+status because of it.** A rehearsal says nothing about how a real drive or
+a real scratched CD behaves. What it buys: a scarce real-disc session is no
+longer spent rediscovering a logic bug that was findable without a disc.
+
+Containment (all three verified by running it for real, not just tested):
+rips land in `~/.cache/wtul/rehearsal`, never the mix folder that gets
+burned; session logs are named `-SIMULATED` so `history()` can't read one
+as a real rip; a separate lockfile keeps it clear of a real rip. A bad
+spec exits rather than falling back to the real drive.
+
 *(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
 it doesn't fit wtul's own read of its bar.)*
 
