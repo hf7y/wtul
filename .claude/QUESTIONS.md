@@ -82,7 +82,19 @@ hand.
   go unnoticed if no one's watching the terminal. Neither designed yet -
   needs: polling interval/rate-limit for (1), and a sound mechanism
   choice for (2) (terminal bell vs a real audio file needs an output
-  device decision). Not built this round.
+  device decision). Not built this round. **BOTH BUILT 2026-07-24 (runs
+  10 and 11) — filed here late 2026-07-25 because those runs hit the
+  `.claude/*.md` sensitive-file write gate and could only draft their
+  entries into `~/reports/wtul/2026-07-24.md`.** (1) built on branch
+  `spin-live-watch` (commit `58731a9`/`ef21883`, pushed) — idle-loop
+  live spin printing + manual `spins` command, live-verified against
+  the real Spinitron page; NOT merged to `main` yet, safe to merge
+  whenever, no decision needed. (2) built as a terminal bell
+  (`WTUL_EARCON=0` to disable) on branch `detection-failure-earcon`,
+  since MERGED to `main` (`d0dd74c`); fires on both metadata-scrape
+  failure points in `rip_session()`, verifiable by ear on the next real
+  rip that hits either path. The "real audio file" upgrade for (2)
+  still awaits the output-device decision.
 - **2026-07-24 (parked, bigger build): smarter on-air-detection than the
   Spinitron page scrape.** After live-testing, default ripping no longer
   gates on a Spinitron match at all (see `bin/wtul-rip` commit
