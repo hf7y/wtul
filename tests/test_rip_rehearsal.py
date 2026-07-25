@@ -229,6 +229,36 @@ def test_fully_ripped_disc_reinserted_does_no_work(monkeypatch, tmp_path, capsys
     assert mod2.SIM.ripped == []
 
 
+def test_punctuated_disc_lands_where_wtul_rip_looks_and_resumes(monkeypatch, tmp_path, capsys):
+    """The 2026-07-25 munging bug, end to end.
+
+    An apostrophe/colon/"?" in the metadata is the common case, not an edge
+    one - abcde strips them from the folder name (abcde.conf's
+    `mungefilename`) and wtul-rip used to look for the unstripped name, so
+    reinserting such a disc re-ripped every track. The assertion on the
+    directory NAME matters as much as the resume behaviour: without it this
+    test would still pass if both halves agreed on a wrong folder, which is
+    exactly how the rehearsal harness missed the bug in the first place.
+    """
+    spec_path = _write_spec(tmp_path, artist="Guns N' Roses",
+                            album="Appetite: For Destruction?")
+    mod = _load_rehearsal(monkeypatch, tmp_path, spec_path)
+    assert mod.rip_session(mod.DEV) is True
+    capsys.readouterr()
+
+    where = mod.album_dir_path("Guns N' Roses", "Appetite: For Destruction?",
+                               SPEC["discid"])
+    assert os.path.basename(os.path.dirname(where)) == "Guns N Roses"
+    assert os.path.basename(where) == "Appetite- For Destruction"
+    assert sorted(os.listdir(where)) == ["01-I Never Lose.mp3", "02-Late Night.mp3",
+                                         "03-Remove the Inside.mp3"]
+
+    mod2 = _load_rehearsal(monkeypatch, tmp_path, spec_path)
+    assert mod2.rip_session(mod2.DEV) is True
+    assert "All tracks already ripped" in capsys.readouterr().out
+    assert mod2.SIM.ripped == []
+
+
 def test_every_track_failing_reports_zero_and_holds_the_disc(monkeypatch, tmp_path, capsys):
     tracks = [dict(t, fails=True) for t in json.loads(json.dumps(SPEC["tracks"]))]
     mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path, tracks=tracks))

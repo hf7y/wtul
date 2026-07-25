@@ -213,17 +213,29 @@ def _silent_mp3(seconds):
 class FakeDrive:
     """Replays one disc spec in place of a real drive.
 
-    `album_dir_fn` is passed in by `bin/wtul-rip` rather than reimplemented
-    here on purpose: where abcde lands a track is decided by
-    `album_dir_path()` mirroring `abcde.conf`'s OUTPUTFORMAT, and a second
-    copy of that rule here would drift from the real one and make the
-    rehearsal pass while production broke.
+    `album_dir_fn` and `munge_fn` are passed in by `bin/wtul-rip` rather
+    than reimplemented here on purpose: where abcde lands a track is decided
+    by `album_dir_path()`/`munge_filename()` mirroring `abcde.conf`'s
+    OUTPUTFORMAT and `mungefilename()`, and a second copy of either rule
+    here would drift from the real one and make the rehearsal pass while
+    production broke.
+
+    That is not hypothetical - it already happened once. This class used to
+    munge track *filenames* with its own inline `re.sub(r"[\\'\\"?]", ...)`,
+    which by coincidence matched the conf while `album_dir_path()` (which
+    it takes the *directory* from) did not munge at all. So the rehearsal
+    reproduced wtul-rip's wrong folder faithfully, agreed with itself, and
+    stayed green through the whole 2026-07-25 bug (see that commit).
     """
 
-    def __init__(self, spec, ripdir, album_dir_fn, sleep_fn=None):
+    def __init__(self, spec, ripdir, album_dir_fn, sleep_fn=None, munge_fn=None):
         self.spec = spec
         self.ripdir = ripdir
         self.album_dir_fn = album_dir_fn
+        # Default is identity, not a re-typed copy of the rule: a caller that
+        # forgets to pass the real one should produce an obviously unmunged
+        # name a test can catch, not a plausible near-miss.
+        self.munge_fn = munge_fn if munge_fn is not None else (lambda s: s)
         self.sleep_fn = sleep_fn if sleep_fn is not None else time.sleep
         self.tempdir = None
         self.ripped = []          # track numbers this rehearsal wrote
@@ -429,7 +441,7 @@ class FakeDrive:
         album_dir = self.album_dir_fn(artist, album, s["discid"])
         os.makedirs(album_dir, exist_ok=True)
 
-        safe_title = re.sub(r"[\'\"?]", "", track["title"].replace(":", "-"))
+        safe_title = self.munge_fn(track["title"])
         path = os.path.join(album_dir, f"{track_num:02d}-{safe_title}.mp3")
         with open(path, "wb") as f:
             f.write(_silent_mp3(track["seconds"]))
@@ -465,7 +477,7 @@ class FakeDrive:
             return
 
 
-def from_env(ripdir, album_dir_fn, sleep_fn=None):
+def from_env(ripdir, album_dir_fn, sleep_fn=None, munge_fn=None):
     """Build a FakeDrive if `WTUL_SIMULATE_DRIVE` is set, else None.
 
     Raises SpecError if the var is set but unusable - the caller is expected
@@ -474,4 +486,5 @@ def from_env(ripdir, album_dir_fn, sleep_fn=None):
     value = os.environ.get(ENV_SPEC, "").strip()
     if not value:
         return None
-    return FakeDrive(load_spec(value), ripdir, album_dir_fn, sleep_fn=sleep_fn)
+    return FakeDrive(load_spec(value), ripdir, album_dir_fn, sleep_fn=sleep_fn,
+                     munge_fn=munge_fn)

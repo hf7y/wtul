@@ -28,17 +28,37 @@ def _spec(**over):
     return base
 
 
+def _munge_filename():
+    """The real `munge_filename` out of bin/wtul-rip, not a copy.
+
+    The simulator takes its filename munging from its caller precisely so
+    there's only one implementation of abcde.conf's rule in the tree; a
+    test that re-typed the rule here would defeat that (and did: the
+    2026-07-25 folder-munging bug survived because the harness and the code
+    under test agreed with each other rather than with abcde.conf)."""
+    import importlib.util
+    from importlib.machinery import SourceFileLoader
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bin", "wtul-rip")
+    loader = SourceFileLoader("wtul_rip_for_fake_drive_tests", path)
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod.munge_filename
+
+
 def _drive(tmp_path, spec=None, **over):
     parsed = _parse(spec or _spec(**over))
     ripdir = str(tmp_path / "2026-07-25")
+    munge = _munge_filename()
 
     def album_dir_fn(artist, album, discid):
-        album = album.strip() or "Unknown Album"
-        if album == "Unknown Album":
-            album = f"Unknown Album ({discid})"
-        return os.path.join(ripdir, artist.strip() or "Unknown Artist", album)
+        album_raw = album.strip() or "Unknown Album"
+        album_file = munge(album_raw)
+        if album_raw == "Unknown Album":
+            album_file = f"{album_file} ({discid})"
+        return os.path.join(ripdir, munge(artist.strip() or "Unknown Artist"), album_file)
 
-    return fake_drive.FakeDrive(parsed, ripdir, album_dir_fn), ripdir
+    return fake_drive.FakeDrive(parsed, ripdir, album_dir_fn, munge_fn=munge), ripdir
 
 
 def _parse(spec_dict, tmp=None):

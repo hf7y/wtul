@@ -654,7 +654,7 @@ def init_simulation():
     if not SIMULATING:
         return
     try:
-        SIM = fake_drive.from_env(RIPDIR, album_dir_path)
+        SIM = fake_drive.from_env(RIPDIR, album_dir_path, munge_fn=munge_filename)
     except fake_drive.SpecError as e:
         print(f"wtul-rip: {fake_drive.ENV_SPEC} is set but unusable: {e}",
               file=sys.stderr)
