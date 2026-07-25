@@ -577,3 +577,10 @@ Still needs, before `/wtul-batch` builds anything real:
   updated to read `FOCUS.md` instead (it was the load-bearing reference,
   not just docs - the scheduled job's own instructions pointed at
   `ROADMAP.md` directly).
+
+## Fable review (2026-07-25)
+
+<!-- Appended by realisateur/fable-like/inject-suggestions.sh. Full context: fable-like/FABLE_REPORT.md. Triage these like any dated entries; delete freely. -->
+
+- **2026-07-25 (fable-review):** the dexter move's one remaining step is human and unnamed in BLOCKERS — record it precisely: install gh on dexter OR add the deploy key via GitHub web UI; a reverted migration with an unnamed step is a mystery in three weeks
+- **2026-07-25 (fable-review):** keep this FOCUS.md thin but add a comment naming ROADMAP.md as source of truth, so the duplication is never "fixed" by deleting the wrong file
