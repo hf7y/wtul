@@ -69,3 +69,17 @@ def test_acoustid_key_env_var_picked_up(monkeypatch, tmp_path):
     mod = _load_wtul_rip(monkeypatch)
     assert mod.ACOUSTID_API_KEY == "test-key"
     assert mod.DISCOGS_TOKEN == ""
+
+
+def test_earcon_enabled_by_default(monkeypatch, capsys):
+    monkeypatch.delenv("WTUL_EARCON", raising=False)
+    mod = _load_wtul_rip(monkeypatch)
+    mod.earcon()
+    assert capsys.readouterr().out == "\a"
+
+
+def test_earcon_disabled_via_env_var(monkeypatch, capsys):
+    monkeypatch.setenv("WTUL_EARCON", "0")
+    mod = _load_wtul_rip(monkeypatch)
+    mod.earcon()
+    assert capsys.readouterr().out == ""

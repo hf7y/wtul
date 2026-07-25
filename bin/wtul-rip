@@ -65,6 +65,16 @@ PER_TRACK_TIMEOUT = 900       # 15 min/track cap - a bad drive can't hang foreve
 MAX_LOG_BYTES = 5_000_000     # matches the old wrapper's runaway-log cap
 POLL_SECS = 2                 # how often we check the drive while idle
 STALE_TEMPDIR_SECS = 6 * 3600 # abandoned rip scratch dirs older than this get pruned
+EARCON_ENABLED = os.environ.get("WTUL_EARCON", "1").strip() != "0"
+
+
+def earcon():
+    """Terminal bell for a detection failure that might go unnoticed if
+    no one's watching the screen. WTUL_EARCON=0 disables (e.g. headless/
+    logged sessions where a stray \\a in the log is unwanted)."""
+    if EARCON_ENABLED:
+        sys.stdout.write("\a")
+        sys.stdout.flush()
 
 
 def sh(cmd, timeout=None):
@@ -605,11 +615,13 @@ def rip_session(dev):
 
     tempdir = newest_abcde_tempdir()
     if not tempdir:
+        earcon()
         print("Could not find abcde's metadata scratch dir - aborting.")
         return True
     discid, artist, album, titles = parse_cddb_metadata(tempdir)
     toc_discid, toc_ntracks = read_toc_discid(tempdir)
     if not toc_discid:
+        earcon()
         print("Metadata scrape failed to produce a discid - aborting.")
         return True
     if not discid:
