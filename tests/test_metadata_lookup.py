@@ -100,6 +100,33 @@ def test_acoustid_lookup_non_dict_json_returns_empty():
         assert ml.acoustid_lookup("key", 300, "fp") == []
 
 
+def test_acoustid_lookup_non_dict_nested_entries_skipped():
+    # Well-formed JSON, but a non-dict entry anywhere inside results/
+    # recordings/artists/releasegroups (a stray string/null) shouldn't
+    # crash the parse - just be skipped like an empty entry would be.
+    body = {
+        "status": "ok",
+        "results": [
+            "oops",
+            {
+                "score": 0.9,
+                "recordings": [
+                    "oops",
+                    {
+                        "title": "Real Track",
+                        "artists": [{"name": "Real Artist"}, "oops"],
+                        "releasegroups": ["oops", {"title": "Real Album"}],
+                    },
+                ],
+            },
+        ],
+    }
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse(body)):
+        guesses = ml.acoustid_lookup("key", 300, "fp")
+    assert guesses == [{"score": 0.9, "artist": "Real Artist",
+                         "title": "Real Track", "album": "Real Album"}]
+
+
 def test_best_album_guess_majority_vote():
     guesses = [
         {"score": 0.9, "artist": "Fela Kuti", "album": "Expensive Shit", "title": "A"},

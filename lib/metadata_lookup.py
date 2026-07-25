@@ -77,14 +77,19 @@ def acoustid_lookup(api_key, duration, fingerprint, base_url=ACOUSTID_URL, timeo
         return []
     guesses = []
     for result in data.get("results", []) or []:
+        if not isinstance(result, dict):
+            continue
         score = result.get("score", 0)
         for rec in result.get("recordings", []) or []:
+            if not isinstance(rec, dict):
+                continue
             artists = rec.get("artists", []) or []
-            artist = " & ".join(a.get("name", "") for a in artists) or None
+            artist = " & ".join(a.get("name", "") for a in artists
+                                 if isinstance(a, dict)) or None
             title = rec.get("title")
             album = None
             for rg in rec.get("releasegroups", []) or []:
-                if rg.get("title"):
+                if isinstance(rg, dict) and rg.get("title"):
                     album = rg["title"]
                     break
             if artist or title:

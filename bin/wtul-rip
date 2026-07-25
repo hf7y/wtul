@@ -164,7 +164,10 @@ def read_toc_discid(tempdir):
         parts = f.read().split()
     if len(parts) < 2:
         return None, 0
-    return parts[0], int(parts[1])
+    try:
+        return parts[0], int(parts[1])
+    except ValueError:
+        return None, 0
 
 
 def parse_cddb_metadata(tempdir):
