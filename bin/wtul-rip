@@ -483,6 +483,59 @@ def munge_filename(text):
     return "".join(c for c in text if c not in "'\"?" and ord(c) >= 32 and ord(c) != 127)
 
 
+def find_prior_rip(discid, exclude_dir=None):
+    """Most recently-modified already-ripped album dir carrying a `.discid`
+    marker matching this disc's TOC discid, else None. TOC discid (not an
+    audio fingerprint) is the identity check here: it's already computed for
+    free by every rip session, per the stopgap this was scoped from in
+    QUESTIONS.md - a real audio-fingerprint-based cache is future work if
+    this proves too weak across different pressings of the same release."""
+    candidates = []
+    for marker in glob.glob(os.path.join(MIXES_ROOT, "*", "*", "*", ".discid")):
+        album_dir = os.path.dirname(marker)
+        if exclude_dir and os.path.abspath(album_dir) == os.path.abspath(exclude_dir):
+            continue
+        try:
+            with open(marker) as f:
+                found = f.read().strip()
+        except OSError:
+            continue
+        if found == discid:
+            candidates.append(album_dir)
+    if not candidates:
+        return None
+    candidates.sort(key=os.path.getmtime, reverse=True)
+    return candidates[0]
+
+
+def symlink_prior_rip(prior_dir, album_dir):
+    """Symlink every mp3 in prior_dir into album_dir (skipping any that
+    already exist there) instead of re-ripping a disc already captured on an
+    earlier week's mix. Returns how many were linked."""
+    os.makedirs(album_dir, exist_ok=True)
+    linked = 0
+    for name in os.listdir(prior_dir):
+        if not name.lower().endswith(".mp3"):
+            continue
+        dst = os.path.join(album_dir, name)
+        if os.path.lexists(dst):
+            continue
+        os.symlink(os.path.join(prior_dir, name), dst)
+        linked += 1
+    return linked
+
+
+def write_discid_marker(album_dir, discid):
+    """Records this album dir's TOC discid so a future rip of the same disc
+    (e.g. next week's show) can be recognized by find_prior_rip() and
+    symlinked instead of re-ripped from scratch."""
+    try:
+        with open(os.path.join(album_dir, ".discid"), "w") as f:
+            f.write(discid + "\n")
+    except OSError:
+        pass
+
+
 def album_dir_path(artist, album, discid):
     """Where abcde will actually place this disc's files. Must mirror the
     OUTPUTFORMAT disambiguation in abcde.conf: unidentified discs all share
@@ -658,11 +711,22 @@ def rip_session(dev):
     album_dir_guess = album_dir_path(artist, album, discid)
     already_done = existing_track_numbers(album_dir_guess)
 
+    if not already_done:
+        prior_dir = find_prior_rip(discid, exclude_dir=album_dir_guess)
+        if prior_dir:
+            linked = symlink_prior_rip(prior_dir, album_dir_guess)
+            if linked:
+                prior_date = os.path.basename(os.path.dirname(os.path.dirname(prior_dir)))
+                print(f"Disc already ripped on {prior_date} ({prior_dir}) - "
+                      f"symlinked {linked} track(s) instead of re-ripping.")
+                already_done = existing_track_numbers(album_dir_guess)
+
     print(f"\nLooked up: {artist.strip()} - {album.strip()} ({len(track_nums)} tracks)")
     print_tracklist(track_nums, titles, durations, already_done)
 
     queue = [n for n in track_nums if n not in already_done]
     if not queue:
+        write_discid_marker(album_dir_guess, discid)
         print("All tracks already ripped.")
         return True
 
@@ -755,6 +819,7 @@ def rip_session(dev):
 
     print(f"\n{ok_count}/{attempted} tracks ripped.")
     if all_ok:
+        write_discid_marker(album_dir_path(artist, album, discid), discid)
         sh(["eject", dev])
         shutil.rmtree(tempdir, ignore_errors=True)
         print("All tracks ripped - disc ejected.")

@@ -147,3 +147,82 @@ def test_check_for_new_spins_never_raises_on_fetch_failure(monkeypatch, capsys):
     keys = mod.check_for_new_spins(seen, quiet_errors=False)
     assert keys is seen
     assert "spin check failed" in capsys.readouterr().out
+
+
+# --- discid-based rerip cache (QUESTIONS.md 2026-07-24 "fingerprint-cache
+# re-rips" idea, built as a stopgap against TOC discid - already computed
+# for free per rip - not a real audio fingerprint) ---
+
+def test_find_prior_rip_returns_none_with_no_markers(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    mod = _load_wtul_rip(monkeypatch)
+    assert mod.find_prior_rip("deadbeef") is None
+
+
+def test_find_prior_rip_matches_marker_from_an_earlier_week(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    mod = _load_wtul_rip(monkeypatch)
+    prior_dir = os.path.join(mod.MIXES_ROOT, "2026-07-10", "Some Artist", "Some Album")
+    os.makedirs(prior_dir)
+    mod.write_discid_marker(prior_dir, "deadbeef")
+    assert mod.find_prior_rip("deadbeef") == prior_dir
+    assert mod.find_prior_rip("othervalue") is None
+
+
+def test_find_prior_rip_excludes_given_dir(monkeypatch, tmp_path):
+    # Today's own (still-empty) album dir shouldn't ever count as its own
+    # "prior" rip, even if something wrote a marker into it already.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    mod = _load_wtul_rip(monkeypatch)
+    todays_dir = os.path.join(mod.RIPDIR, "Some Artist", "Some Album")
+    os.makedirs(todays_dir)
+    mod.write_discid_marker(todays_dir, "deadbeef")
+    assert mod.find_prior_rip("deadbeef", exclude_dir=todays_dir) is None
+
+
+def test_find_prior_rip_prefers_most_recently_modified(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    mod = _load_wtul_rip(monkeypatch)
+    older = os.path.join(mod.MIXES_ROOT, "2026-06-01", "A", "B")
+    newer = os.path.join(mod.MIXES_ROOT, "2026-07-01", "A", "B")
+    os.makedirs(older)
+    os.makedirs(newer)
+    mod.write_discid_marker(older, "deadbeef")
+    older_marker = os.path.join(older, ".discid")
+    os.utime(older_marker, (1000, 1000))
+    mod.write_discid_marker(newer, "deadbeef")
+    newer_marker = os.path.join(newer, ".discid")
+    os.utime(newer_marker, (2000, 2000))
+    assert mod.find_prior_rip("deadbeef") == newer
+
+
+def test_symlink_prior_rip_links_mp3s_and_skips_existing(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    mod = _load_wtul_rip(monkeypatch)
+    prior_dir = os.path.join(mod.MIXES_ROOT, "2026-07-10", "A", "B")
+    os.makedirs(prior_dir)
+    with open(os.path.join(prior_dir, "01-Song.mp3"), "w") as f:
+        f.write("fake mp3 data")
+    with open(os.path.join(prior_dir, "notes.txt"), "w") as f:
+        f.write("not a track")
+
+    album_dir = os.path.join(mod.RIPDIR, "A", "B")
+    os.makedirs(album_dir)
+    with open(os.path.join(album_dir, "02-AlreadyHere.mp3"), "w") as f:
+        f.write("already ripped separately")
+
+    linked = mod.symlink_prior_rip(prior_dir, album_dir)
+    assert linked == 1
+    assert os.path.islink(os.path.join(album_dir, "01-Song.mp3"))
+    assert not os.path.exists(os.path.join(album_dir, "notes.txt"))
+    # A track that already existed in album_dir isn't touched/relinked.
+    assert not os.path.islink(os.path.join(album_dir, "02-AlreadyHere.mp3"))
+
+
+def test_write_discid_marker_is_silent_on_missing_dir(monkeypatch, tmp_path):
+    # album_dir not existing shouldn't raise - a completed rip always makes
+    # its own dir first, but this stays defensive rather than assuming.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    mod = _load_wtul_rip(monkeypatch)
+    missing_dir = os.path.join(mod.MIXES_ROOT, "2026-07-10", "Nope", "Nope")
+    mod.write_discid_marker(missing_dir, "deadbeef")  # must not raise
