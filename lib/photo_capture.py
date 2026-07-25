@@ -145,7 +145,7 @@ def associate_photo(exec_url, pairing_code, dest_dir, mp3_paths, timeout=180, in
     if not found:
         return {"status": "no_photo", "pairing_code": pairing_code}
     image_path = os.path.join(dest_dir, "cover.jpg")
-    if not download_image(found["url"], image_path):
+    if not download_image(found.get("url"), image_path):
         return {"status": "download_failed", "pairing_code": pairing_code}
     ok, failed = embed_album_art(image_path, mp3_paths)
     return {

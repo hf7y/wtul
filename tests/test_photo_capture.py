@@ -178,6 +178,15 @@ def test_associate_photo_download_fails():
     assert result == {"status": "download_failed", "pairing_code": "abc123"}
 
 
+def test_associate_photo_found_without_url_key_degrades_to_download_failed():
+    # A {"found": true} response missing "url" (GAS bug/edge case) should
+    # degrade to the documented download_failed status, not raise KeyError.
+    with patch.object(pc, "wait_for_photo", return_value={"found": True}):
+        result = pc.associate_photo("https://example.com/exec", "abc123", "/tmp", ["/tmp/1.mp3"],
+                                     sleep=lambda s: None)
+    assert result == {"status": "download_failed", "pairing_code": "abc123"}
+
+
 def test_associate_photo_embeds_successfully(tmp_path):
     with patch.object(pc, "wait_for_photo", return_value={"found": True, "url": "https://drive.example/x"}), \
          patch.object(pc, "download_image", return_value=True) as mock_dl, \
