@@ -88,8 +88,8 @@ hand.
   entries into `~/reports/wtul/2026-07-24.md`.** (1) built on branch
   `spin-live-watch` (commit `58731a9`/`ef21883`, pushed) — idle-loop
   live spin printing + manual `spins` command, live-verified against
-  the real Spinitron page; NOT merged to `main` yet, safe to merge
-  whenever, no decision needed. (2) built as a terminal bell
+  the real Spinitron page; MERGED to `main` 2026-07-25 (`8042b62`,
+  110/110 tests green), no decision needed. (2) built as a terminal bell
   (`WTUL_EARCON=0` to disable) on branch `detection-failure-earcon`,
   since MERGED to `main` (`d0dd74c`); fires on both metadata-scrape
   failure points in `rip_session()`, verifiable by ear on the next real
