@@ -186,3 +186,17 @@ hand.
   connection through* its own print, not just disconnecting once
   beforehand - the mid-print steal means a one-time pre-disconnect
   isn't enough).
+- **2026-07-24 (wtul-batch):** Run 14 live-verified ROADMAP #7's OCR
+  fallback end-to-end (non-hardware parts) - and found blocker (a)
+  ("tesseract-ocr not installed, no sudo") was already stale: a working
+  `tesseract` 5.3.4 + English tessdata already exists at
+  `~/.local/opt/tesseract-user/usr/bin/tesseract` (dated April 2024, some
+  prior unrelated local install), and `lib/ocr_metadata.py`'s own
+  `find_tesseract()` fallback already finds it correctly. Ran the real
+  binary against a synthetic test cover image (no mocks) and got back
+  real OCR'd candidate lines. Branch `ocr-metadata-extraction`'s full
+  suite re-verified clean (86/86). See `.claude/FOCUS.md`'s #7 section
+  for the full update. Only remaining blocker for #7 is unchanged and
+  still hardware-gated: a real disc's real cover photo, which needs #4's
+  live phone-capture flow. No decision needed from you; this is a status
+  correction, not a new feature.

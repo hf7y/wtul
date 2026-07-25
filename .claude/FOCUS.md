@@ -362,20 +362,36 @@ alongside the existing manual artist/album prompt - never auto-filled,
 same confirm/edit discipline #2's suggestions already follow. 20 new
 tests (`tests/test_ocr_metadata.py`), subprocess fully mocked.
 
-**Still pending real verification, on two fronts**: (a) `tesseract-ocr`
-itself is not installed on this machine (no apt/sudo access this
-session) - the real binary has never been invoked; (b) even once
-installed, this has never been tried against a real disc's real cover
-photo, which itself needs #4's live phone-capture flow to produce a
-cover.jpg in the first place. Both blockers need to clear (tesseract
-installed + a real #4 capture) before this can be trusted.
+**Update (2026-07-24, wtul-batch run 14): blocker (a) was already stale
+before this session started.** A real `tesseract` 5.3.4 binary + English
+`tessdata` turned out to already exist at
+`~/.local/opt/tesseract-user/usr/bin/tesseract` (dated April 2024 - some
+prior, unrelated local install, not something any `wtul-batch` run put
+there). `find_tesseract()`'s own PATH-then-local-install fallback finds
+it correctly (verified directly this round, not assumed). Ran the real,
+un-mocked pipeline end to end: generated a synthetic cover image with
+"RADIOHEAD" / "OK Computer" text via Pillow, pointed
+`ocr_cover_candidates()` at it with no mocks - it shelled out to the real
+binary and returned OCR'd candidate lines (`['PADIOHEAD', 'OkComputer']`
+- imperfect character recognition on a plain default-font test image, as
+expected, but the plumbing - binary discovery, subprocess invocation,
+`TESSDATA_PREFIX` env passthrough, line-cleaning - is now genuinely
+live-verified, not just unit-tested against mocks). Full branch suite
+re-run clean: 86/86 passing.
+
+**Still pending real verification, on one front only now**: (b) this has
+never been tried against a *real disc's real cover photo* (as opposed to
+a synthetic test image), which still needs #4's live phone-capture flow
+to produce a `cover.jpg` in the first place - that part is unchanged,
+still hardware/phone-gated.
 
 Needs before starting:
 - ~~Depends on #4 existing first (the photo capture/association
   pipeline).~~ - exists, on unmerged branch `web-photo-capture`.
-- ~~An OCR engine~~ - `tesseract-ocr` CLI, not yet installed on this
-  machine (needs `sudo apt install tesseract-ocr` - no sudo password
-  available in an unattended session).
+- ~~An OCR engine~~ - **resolved 2026-07-24, see Update above**: a
+  working local `tesseract` install already exists on this machine and
+  is picked up automatically; no further `sudo apt install` action
+  needed.
 - ~~OCR'd text would be messy/unstructured~~ - resolved as "present to
   the user as a suggestion they confirm/edit", per Status above; no
   fuzzy-match-to-fields step was built, deliberately (raw OCR lines are
