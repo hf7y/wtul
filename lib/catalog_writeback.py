@@ -43,9 +43,17 @@ def confirm_row(url, fields, limit=3, timeout=15):
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
     except (urllib.error.URLError, OSError, ValueError):
         return False
+    if not isinstance(data, dict):
+        # A GAS error/misconfiguration can return valid JSON that isn't
+        # an object (bare string, null, list) - not a parse failure, so
+        # the except clause above never catches it. `.get("rows", ...)`
+        # would raise AttributeError on anything non-dict otherwise.
+        return False
     want_artist = str(fields.get("ARTIST", "")).strip()
     want_album = str(fields.get("ALBUM", "")).strip()
     for row in data.get("rows", []) or []:
+        if not isinstance(row, dict):
+            continue
         if (str(row.get("ARTIST", "")).strip() == want_artist
                 and str(row.get("ALBUM", "")).strip() == want_album):
             return True

@@ -73,6 +73,22 @@ def test_confirm_row_network_error_returns_false():
         assert cw.confirm_row("https://example.com/exec", {"ARTIST": "X", "ALBUM": "Y"}) is False
 
 
+def test_confirm_row_non_dict_json_returns_false():
+    # A GAS error/misconfiguration can return valid JSON that isn't an
+    # object (bare string, null, list) - not a parse failure, so the
+    # except clause alone doesn't catch it.
+    for body in ["error", None, [], False]:
+        with patch.object(cw.urllib.request, "urlopen", return_value=_FakeResponse(body)):
+            assert cw.confirm_row("https://example.com/exec", {"ARTIST": "X", "ALBUM": "Y"}) is False
+
+
+def test_confirm_row_non_dict_rows_entries_are_skipped():
+    body = {"rows": ["not a row", {"ARTIST": "Fela Kuti", "ALBUM": "Expensive Shit"}]}
+    with patch.object(cw.urllib.request, "urlopen", return_value=_FakeResponse(body)):
+        assert cw.confirm_row("https://example.com/exec",
+                               {"ARTIST": "Fela Kuti", "ALBUM": "Expensive Shit"}) is True
+
+
 def test_write_row_posts_then_confirms():
     with patch.object(cw, "post_row") as mock_post, \
          patch.object(cw, "confirm_row", return_value=True) as mock_confirm:
