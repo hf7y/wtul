@@ -1,0 +1,13 @@
+{
+  "discid": "700a8608",
+  "artist": "Belong",
+  "album": "October Language",
+  "match": true,
+  "disc_present": true,
+  "read_speed": "4.2",
+  "tracks": [
+    { "title": "I Never Lose", "length": "3:00" },
+    { "title": "Late Night", "length": "2:30" },
+    { "title": "Remove the Inside", "length": "4:10", "fails": false }
+  ]
+}
