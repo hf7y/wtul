@@ -101,13 +101,12 @@ hand.
   worth reconciling with both rather than freelancing a third mechanism
   when this actually gets built.
 - **2026-07-24 (parked, hardware): eject softkey, since the drive doesn't
-  have a physical eject button.** Surfaced during live testing (`q` got
-  stuck / disc needed manual handling with no way to eject from the
-  drive itself). Idea: a `wtul-rip` command (e.g. `eject`) that shells
-  out to `eject <dev>` so the disc can be ejected from the keyboard
-  instead. Not built - no confirmed need yet beyond this one session,
-  and worth checking `eject` actually works against this drive
-  (SuperDrive quirks already bit us once today) before wiring it in.
+  have a physical eject button. RESOLVED same day (live session, not
+  wtul-batch) - already built and on `main`.** `bin/wtul-rip`'s idle loop
+  and its "disc left in drive" retry prompt both accept `e` and shell out
+  to `eject <dev>` (see `main`, commit `f218be8`). This entry was stale by
+  the time `wtul-batch` run 12 (2026-07-24) checked it - flagging only so
+  the next run doesn't re-propose it.
 - **2026-07-24 (parked, bigger build): fallback metadata service for
   discs AcoustID+Discogs (#2) can't identify.** Surfaced live: `fix
   <discid>` ran its full suggestion path and still came back empty for
@@ -120,23 +119,34 @@ hand.
   `~/Music/ripped/` for a later identification pass rather than
   blocking or getting silently included in a mix.
 - **2026-07-24 (parked, bigger build): fingerprint-cache re-rips of
-  previously-ripped discs, symlink instead of re-ripping.** Idea from
-  live use: `wtul` runs on a recurring (weekly) schedule and the same
-  disc may come back around already-ripped. If a disc's audio
-  fingerprint (or its TOC discid, cheaper but less robust across
-  different pressings of the same release) matches something already in
-  `~/Music/ripped/`, skip the actual rip and symlink the existing files
-  instead of re-encoding from scratch - saves real rip time on repeats.
-  Explicitly floated as a stopgap ("weekly rips can symlink across weeks
-  until a more robust database gets developed") rather than the final
-  shape - a real cross-week catalog/database is the eventual version.
-  Not designed: what identity check to use (TOC discid is what's
-  already computed for free vs. an audio fingerprint being more
-  robust-but-costlier), where the cache index lives, what happens on a
-  fingerprint collision. Ties into #2's fingerprinting work (same
-  `fpcalc`/AcoustID machinery could double as the identity check here)
-  and generalizes beyond just already-identified discs, per the idea's
-  own framing ("general good idea even for detected rips").
+  previously-ripped discs, symlink instead of re-ripping. BUILT 2026-07-24
+  (wtul-batch run 12) as the stopgap version, branch `discid-rerip-cache`
+  (commit `8703e12`, pushed).** Went with TOC discid (not a real audio
+  fingerprint) as the identity check, per this idea's own note that it's
+  "cheaper but less robust across different pressings of the same
+  release" and "already computed for free" - the reasonable stopgap
+  interpretation, not the eventual cross-week catalog/database. Each
+  fully-completed album dir now gets a `.discid` marker file
+  (`write_discid_marker()`); `find_prior_rip()` scans
+  `MIXES_ROOT/*/*/*/.discid` for a match (excluding today's own dir),
+  preferring the most-recently-modified if more than one prior dir
+  somehow shares a discid; `symlink_prior_rip()` links that prior dir's
+  mp3s into today's album dir instead of re-ripping. Wired into
+  `rip_session()` right where it already checks for same-day resume.
+  6 new tests in `tests/test_wiring.py` (no hardware needed - pure
+  filesystem logic against synthetic dirs under a tmp `HOME`): no-marker
+  case, matching-marker case, self-exclusion, most-recent-wins on a
+  multi-candidate collision, symlink-vs-skip-existing, and a
+  missing-dir-doesn't-raise defensive case. Full suite: 47/47 passing,
+  `py_compile` clean. **Known limitation, not fixed this round** (matches
+  the idea's own "stopgap, not final shape" framing): if a symlinked
+  track's original file is later deleted or moved, the symlink in every
+  mix folder that referenced it goes dangling - a real cross-week
+  database (the idea's own stated eventual version) would need to handle
+  that; this round didn't design that far. **Needs hands-on verification
+  against two real rips of the same physical disc a week apart** before
+  being trusted - this round only exercised it against synthetic
+  fixtures, never a real `rip_session()` run with an actual drive.
 - **2026-07-24 (parked, hardware/flaky): Phomemo M02 BLE connection is
   unreliable - flag for a dedicated session, not chased further
   tonight.** During live label-printing (#3), `print_label()`'s
