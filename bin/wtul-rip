@@ -394,7 +394,11 @@ def fix_by_discid(discid):
     if not new_album:
         print("No album given, leaving as-is.")
         return
-    new_dir = os.path.join(day_dir, new_artist, new_album)
+    # Same munging as album_dir_path(): a fixed disc has to land in the
+    # folder abcde itself would have written, or re-inserting that disc
+    # later won't see it as already-ripped. (Typed by hand here rather than
+    # scraped, so ":"/"?"/quotes are, if anything, more likely.)
+    new_dir = os.path.join(day_dir, munge_filename(new_artist), munge_filename(new_album))
     os.makedirs(new_dir, exist_ok=True)
     try:
         from mutagen.easyid3 import EasyID3
@@ -439,17 +443,51 @@ def existing_track_numbers(album_dir):
     return got
 
 
+def munge_filename(text):
+    """Python mirror of `mungefilename()` in abcde.conf.
+
+        mungefilename () { echo "$@" | sed s,:,-,g | tr -d \\'\\"\\?\\[:cntrl:\\] ; }
+
+    abcde runs every path component of OUTPUTFORMAT (ARTISTFILE, ALBUMFILE,
+    TRACKFILE) through that before writing, so anything here that predicts
+    where a file landed has to apply the same rule or it predicts a folder
+    that does not exist. Deliberately does NOT touch "/": abcde's version
+    doesn't either, so an artist like "AC/DC" nests a directory in both -
+    mirroring the real behaviour matters more than the tidier one.
+
+    `tests/test_album_dir_munge.py` checks this against the shell function
+    in abcde.conf by actually running it, so the two can't silently drift.
+    """
+    text = str(text).replace(":", "-")
+    return "".join(c for c in text if c not in "'\"?" and ord(c) >= 32 and ord(c) != 127)
+
+
 def album_dir_path(artist, album, discid):
     """Where abcde will actually place this disc's files. Must mirror the
     OUTPUTFORMAT disambiguation in abcde.conf: unidentified discs all share
     the literal "Unknown Album" title, so without the disc ID suffix every
     unidentified disc would resolve to the same folder and each would look
-    like the others' tracks were already ripped."""
-    artist_clean = artist.strip() or "Unknown Artist"
-    album_clean = album.strip() or "Unknown Album"
-    if album_clean == "Unknown Album":
-        album_clean = f"Unknown Album ({discid})"
-    return os.path.join(RIPDIR, artist_clean, album_clean)
+    like the others' tracks were already ripped.
+
+    It must mirror abcde.conf's `mungefilename()` too (2026-07-25): this
+    used to pass artist/album through untouched, so any disc whose metadata
+    contained an apostrophe, a quote, a "?" or a ":" - "It's Alive",
+    "Songs: Ohia" - resolved to a folder abcde had never written to. That
+    silently broke three things at once, all of which look like the feature
+    just not working rather than like a path bug: resume-skip on reinsert
+    re-ripped every track, `find_track_file()` never populated `ripped` so
+    live `artist=`/`album=`/`N=Title` edits couldn't retag what was already
+    on disk, and `retag_ripped_tracks()` moved files into a second wrong
+    folder. Note the suffix is keyed on the RAW album name and appended
+    AFTER munging, because that's the order OUTPUTFORMAT does it in
+    ("${ALBUMFILE}$([ "$DALBUM" = "Unknown Album" ] && ...)").
+    """
+    artist_raw = artist.strip() or "Unknown Artist"
+    album_raw = album.strip() or "Unknown Album"
+    album_clean = munge_filename(album_raw)
+    if album_raw == "Unknown Album":
+        album_clean = f"{album_clean} ({discid})"
+    return os.path.join(RIPDIR, munge_filename(artist_raw), album_clean)
 
 
 def print_tracklist(track_nums, titles, durations, already_done):
