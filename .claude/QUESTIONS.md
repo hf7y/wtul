@@ -307,3 +307,61 @@ hand.
   target repo**, since one of two suggestions was wrong and the other was
   misdelivered.
 
+- **2026-07-25 (wtul-batch, run 19): branch health after main absorbed
+  three branches - no decision needed.** Found `detection-failure-earcon`,
+  `label-printer-integration` and `spin-live-watch` merged to `main` since
+  run 18 (merge commits tagged `[autonomy-tier:high, gate:tests-passed]` -
+  not a wtul-batch action; noting for the record since every prior run
+  held merges as a standing open question). Pruned those three refs
+  (local + origin) per run 18's own rule for merged branches, then rebased
+  the five survivors onto the post-merge `main` - all five conflicted in
+  `bin/wtul-rip`/`tests/test_wiring.py`, resolved keep-both, every suite
+  re-run green from scratch, force-pushed. Tips + pre-rebase SHAs in
+  `~/reports/wtul/2026-07-25.md` (run 19). This run did NOT merge anything
+  itself - the remaining five all still carry hardware-verification gates
+  or (rehearsal harness) the hold-for-your-review note.
+- **2026-07-25 (wtul-batch, run 19): #6's `speed` report would have said
+  'No rip logs yet' forever - fixed on `rip-speed-monitoring`
+  (`11cc903`), and the parser is now verified against real logs.** It only
+  read `~/Music/mixes/.logs`, which doesn't exist until the first
+  post-migration rip; all 37 real logs (incl. the 2026-07-24 live session)
+  are at the legacy `~/Music/ripped/.logs`. It now reads both, merged
+  chronologically (3 new tests, mutation-checked). Ran the report against
+  the real history as a witness: 16 sessions with speed data, 30 tracks,
+  overall median 23.2x (min 16.9x, max 27.6x), no slow-track flags, no
+  degradation warning - your drive has been consistent across both log
+  eras. STILL HARDWARE-GATED for merge: the live per-track `(read speed
+  N.Nx)` print only fires during a real rip; the milestone criterion is
+  unchanged.
+- **2026-07-25 (wtul-batch, run 19): rehearsal would have physically
+  printed a junk label - fixed on `rip-rehearsal-harness` (`6808e84`).**
+  #3's merge to `main` put `print_label()` (real catprint/BLE - catprint
+  exists on this machine) onto the rehearsed complete-disc path, so a full
+  demo rehearsal with the M02 in range would have printed and wasted real
+  label tape. Same containment class and same cause (main moved under the
+  branch) as run 17's catalog-row leak. Now suppressed under rehearsal
+  ('Label: print SUPPRESSED'), regression-tested, and witnessed by running
+  the full demo disc for real. No hardware verification needed (the guard
+  prevents hardware use; the ungated path is unchanged).
+- **2026-07-25 (wtul-batch, run 19): built M02 mitigation (b) on new
+  branch `m02-preprint-disconnect` (`affd850`) - NEEDS HANDS-ON PRINTER
+  VERIFICATION, plus one finding that reframes the BLE mystery.** The
+  finding (read-only, from `bluetoothctl info`): the M02 advertises a
+  Human Interface Device (0x1812) service UUID, and BlueZ's *input plugin*
+  auto-reconnects paired+bonded HID devices whenever they advertise -
+  independent of KDE's trust flag, which is exactly why `bluetoothctl
+  untrust` changed nothing on 2026-07-24 (and `bluedevilglobalrc`'s
+  connectedDevices list is empty, so KDE login-reconnect isn't the actor).
+  The build: `print_label()` now does a best-effort `bluetoothctl
+  disconnect <mac>` right before invoking catprint, opt-in via
+  `WTUL_PRINTER_MAC` (unset = exactly the old behavior; failures never
+  block the print attempt; 5 new tests, mutation-checked). To try it on
+  the next print session: add `WTUL_PRINTER_MAC=EA:F3:B6:A2:70:33` to
+  `~/.config/wtul/secrets.env` (not done for you - the branch isn't
+  merged, and activating it should coincide with you watching a print).
+  This addresses the at-start collision only; the MID-print steal likely
+  needs the dedicated session to try **unpairing** the M02 (a BLE-only
+  catprint connection shouldn't need the bond, and unpairing is what makes
+  the input plugin lose interest) - flagging that as the first experiment
+  for that session rather than doing it unattended, since with the printer
+  absent there'd be no way to re-pair or verify anything.

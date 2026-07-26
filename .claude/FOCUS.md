@@ -142,6 +142,40 @@ Neither fix needs hardware to verify, and neither clears a hardware gate -
 but both were live in the path a real show-night rip takes, so the next
 real rip should behave better than the last one did.
 
+**Update (2026-07-25, run 19): `main` absorbed three branches; the
+remaining five rebased green on top.** Between runs 18 and 19,
+`detection-failure-earcon`, `label-printer-integration` and
+`spin-live-watch` were merged to `main` (merge commits tagged
+`[autonomy-tier:high, gate:tests-passed]` — not a wtul-batch action);
+their refs are pruned locally and on origin, per the same rule run 18
+applied to its own merged branches. The five still-unmerged branches
+(`discid-rerip-cache`, `rip-rehearsal-harness`, `rip-speed-monitoring`,
+`web-photo-capture`, `ocr-metadata-extraction`) all conflicted with the
+merged code (same-file changes in `bin/wtul-rip`/`tests/test_wiring.py`),
+were resolved keep-both, re-tested green from scratch, and force-pushed —
+tips in `~/reports/wtul/2026-07-25.md` (run 19). Two real bugs surfaced
+and were fixed in the process, plus one new mitigation branch:
+1. **#6's `speed` report was blind to every rip ever made**: it read only
+   `~/Music/mixes/.logs`, which won't exist until the first post-migration
+   rip — all 37 real logs (incl. the 2026-07-24 live session) are at the
+   legacy `~/Music/ripped/.logs`. Fixed on `rip-speed-monitoring`
+   (`11cc903`): reads both, merged chronologically. The parser/report side
+   is now verified against the real 37-log history (16 sessions with speed
+   data, overall median 23.2x, no slow-track flags, no degradation
+   warning) — the live per-track print is still real-rip-gated.
+2. **A complete rehearsal would now have physically printed a junk
+   label**: #3's merge put `print_label()` (real catprint/BLE) on the
+   harness's complete-disc path. Suppressed under rehearsal on
+   `rip-rehearsal-harness` (`6808e84`), regression-tested and witnessed
+   live — same containment class, and same main-moved-under-the-branch
+   cause, as run 17's catalog leak.
+3. **New branch `m02-preprint-disconnect`** (#3, QUESTIONS.md option (b)):
+   opt-in pre-print `bluetoothctl disconnect` via `WTUL_PRINTER_MAC`, off
+   by default. Investigation finding: the M02 advertises a HID (0x1812)
+   service UUID, so BlueZ's input plugin auto-reconnects it independent of
+   KDE trust — which explains why `bluetoothctl untrust` didn't stop the
+   reconnects. Hardware-gated for verification.
+
 *(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
 it doesn't fit wtul's own read of its bar.)*
 
