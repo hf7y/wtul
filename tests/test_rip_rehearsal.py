@@ -128,8 +128,13 @@ def test_full_disc_rips_all_tracks_and_reports_done(monkeypatch, tmp_path, capsy
     assert "3/3 tracks ripped" in out
     assert "Belong - October Language (3 tracks)" in out
     album_dir = os.path.join(mod.RIPDIR, "Belong", "October Language")
+    # ".discid" is the re-rip cache's marker (find_prior_rip), written on
+    # every completed disc since discid-rerip-cache merged.
     assert sorted(os.listdir(album_dir)) == [
+        ".discid",
         "01-I Never Lose.mp3", "02-Late Night.mp3", "03-Remove the Inside.mp3"]
+    with open(os.path.join(album_dir, ".discid")) as f:
+        assert f.read().strip() == SPEC["discid"]
 
 
 def test_full_disc_ejects_and_cleans_up_its_tempdir(monkeypatch, tmp_path):
@@ -250,7 +255,8 @@ def test_punctuated_disc_lands_where_wtul_rip_looks_and_resumes(monkeypatch, tmp
                                SPEC["discid"])
     assert os.path.basename(os.path.dirname(where)) == "Guns N Roses"
     assert os.path.basename(where) == "Appetite- For Destruction"
-    assert sorted(os.listdir(where)) == ["01-I Never Lose.mp3", "02-Late Night.mp3",
+    assert sorted(os.listdir(where)) == [".discid",
+                                         "01-I Never Lose.mp3", "02-Late Night.mp3",
                                          "03-Remove the Inside.mp3"]
 
     mod2 = _load_rehearsal(monkeypatch, tmp_path, spec_path)
@@ -410,14 +416,21 @@ def test_fix_by_discid_applies_a_manual_correction(monkeypatch, tmp_path, capsys
 
     new_dir = os.path.join(mod.RIPDIR, "Real Artist", "Real Album")
     assert os.path.isdir(new_dir), os.listdir(mod.RIPDIR)
-    files = sorted(os.listdir(new_dir))
-    assert len(files) == 3, files
-    tags = EasyID3(os.path.join(new_dir, files[0]))
+    mp3s = sorted(f for f in os.listdir(new_dir) if f.endswith(".mp3"))
+    assert len(mp3s) == 3, mp3s
+    tags = EasyID3(os.path.join(new_dir, mp3s[0]))
     assert tags["artist"] == ["Real Artist"]
     assert tags["album"] == ["Real Album"]
-    # The old Unknown folder should not be left behind alongside the fixed one.
+    # The re-rip cache marker must follow the music: a marker left in the
+    # old Unknown dir would make find_prior_rip() match a dir with no mp3s
+    # in it on the next insert of this disc.
+    with open(os.path.join(new_dir, ".discid")) as f:
+        assert f.read().strip() == "700a8608"
+    # The old Unknown folder should not be left behind alongside the fixed
+    # one - and its parent shouldn't either once emptied.
     assert not os.path.isdir(os.path.join(mod.RIPDIR, "Unknown Artist",
                                           "Unknown Album (700a8608)"))
+    assert not os.path.isdir(os.path.join(mod.RIPDIR, "Unknown Artist"))
 
 
 def test_fix_by_discid_accepts_a_suggestion_on_blank_input(monkeypatch, tmp_path, capsys):

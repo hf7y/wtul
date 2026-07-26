@@ -466,9 +466,23 @@ def fix_by_discid(discid):
         os.rename(old_path, new_path)
         retag_mp3(new_path, artist=new_artist, album=new_album)
         moved += 1
+    # The .discid marker has to follow the music: left behind, it makes
+    # this dir un-removable below AND leaves find_prior_rip() matching a
+    # dir with no mp3s in it, so a later re-insert of this disc would
+    # "already ripped" against nothing instead of the corrected folder.
+    old_marker = os.path.join(old_dir, ".discid")
+    if os.path.exists(old_marker):
+        try:
+            os.remove(old_marker)
+        except OSError:
+            pass
+        write_discid_marker(new_dir, discid)
     try:
         if not os.listdir(old_dir):
             os.rmdir(old_dir)
+            parent = os.path.dirname(old_dir)
+            if os.path.isdir(parent) and not os.listdir(parent):
+                os.rmdir(parent)
     except OSError:
         pass
     print(f"Moved and retagged {moved} track(s) to {new_dir}")
