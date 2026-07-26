@@ -730,12 +730,18 @@ def _sh_live_simulated(cmd, logfile):
     saw_error = False
     urgent = None
     pending = []
+    last_speed = None
     written = os.path.getsize(logfile) if os.path.exists(logfile) else 0
     with open(logfile, "a") as lf:
         for line in lines:
             print(f"    {line}")
             if "[ERROR]" in line:
                 saw_error = True
+            sm = None
+            for sm in SPEED_RE.finditer(line):
+                pass
+            if sm and float(sm.group(1)) > 0:
+                last_speed = float(sm.group(1))
             if written < MAX_LOG_BYTES:
                 written += lf.write(line + "\n")
             r, _, _ = select.select([sys.stdin], [], [], 0)
@@ -748,7 +754,7 @@ def _sh_live_simulated(cmd, logfile):
                 break
             elif cmdline.strip():
                 pending.append(cmdline)
-    return rc, saw_error, urgent, pending
+    return rc, saw_error, urgent, pending, last_speed
 
 
 def init_simulation():
