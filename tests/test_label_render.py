@@ -121,14 +121,16 @@ def test_render_mix_label_columns_qr_only_on_last_strip():
     assert strips[0].height == strips_no_qr[0].height
 
 
-def test_print_label_missing_catprint_binary(tmp_path):
+def test_print_label_missing_catprint_binary(tmp_path, monkeypatch):
+    monkeypatch.delenv("WTUL_PRINTER_MAC", raising=False)
     image = lr.render_label("Artist", "Album")
     ok, reason = lr.print_label(image, catprint_bin=str(tmp_path / "no-such-binary"))
     assert ok is False
     assert "not found" in reason
 
 
-def test_print_label_success_with_stub_binary(tmp_path):
+def test_print_label_success_with_stub_binary(tmp_path, monkeypatch):
+    monkeypatch.delenv("WTUL_PRINTER_MAC", raising=False)
     stub = tmp_path / "fake-catprint"
     stub.write_text("#!/bin/sh\nexit 0\n")
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
@@ -138,7 +140,8 @@ def test_print_label_success_with_stub_binary(tmp_path):
     assert reason is None
 
 
-def test_print_label_failure_with_stub_binary(tmp_path):
+def test_print_label_failure_with_stub_binary(tmp_path, monkeypatch):
+    monkeypatch.delenv("WTUL_PRINTER_MAC", raising=False)
     stub = tmp_path / "fake-catprint-fail"
     stub.write_text("#!/bin/sh\necho 'no bluetooth adapter' >&2\nexit 1\n")
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
@@ -146,3 +149,86 @@ def test_print_label_failure_with_stub_binary(tmp_path):
     ok, reason = lr.print_label(image, catprint_bin=str(stub))
     assert ok is False
     assert "bluetooth" in reason
+
+
+# --- pre-print BLE disconnect (Phomemo M02 connection-steal mitigation,
+# QUESTIONS.md 2026-07-24 option (b)) ---
+
+def _stub(tmp_path, name, script):
+    path = tmp_path / name
+    path.write_text(script)
+    path.chmod(path.stat().st_mode | stat.S_IEXEC)
+    return str(path)
+
+
+def test_print_label_disconnects_printer_before_printing(tmp_path, monkeypatch):
+    monkeypatch.delenv("WTUL_PRINTER_MAC", raising=False)
+    calls = tmp_path / "calls.log"
+    btctl = _stub(tmp_path, "fake-bluetoothctl",
+                  f"#!/bin/sh\necho \"btctl $@\" >> {calls}\n"
+                  "echo 'Successful disconnected'\nexit 0\n")
+    catprint = _stub(tmp_path, "fake-catprint",
+                     f"#!/bin/sh\necho \"catprint\" >> {calls}\nexit 0\n")
+    image = lr.render_label("Artist", "Album")
+    ok, reason = lr.print_label(image, catprint_bin=catprint,
+                                 printer_mac="EA:F3:B6:A2:70:33",
+                                 bluetoothctl_bin=btctl)
+    assert ok is True
+    lines = calls.read_text().splitlines()
+    # The disconnect must come first - freeing the connection after catprint
+    # already fought for it would be pointless.
+    assert lines == ["btctl disconnect EA:F3:B6:A2:70:33", "catprint"]
+
+
+def test_print_label_mac_from_env_var(tmp_path, monkeypatch):
+    calls = tmp_path / "calls.log"
+    btctl = _stub(tmp_path, "fake-bluetoothctl",
+                  f"#!/bin/sh\necho \"btctl $@\" >> {calls}\nexit 0\n")
+    catprint = _stub(tmp_path, "fake-catprint", "#!/bin/sh\nexit 0\n")
+    monkeypatch.setenv("WTUL_PRINTER_MAC", "  AA:BB:CC:DD:EE:FF  ")
+    image = lr.render_label("Artist", "Album")
+    ok, _ = lr.print_label(image, catprint_bin=catprint, bluetoothctl_bin=btctl)
+    assert ok is True
+    assert calls.read_text().splitlines() == ["btctl disconnect AA:BB:CC:DD:EE:FF"]
+
+
+def test_print_label_no_mac_means_no_bluetoothctl_call(tmp_path, monkeypatch):
+    monkeypatch.delenv("WTUL_PRINTER_MAC", raising=False)
+    calls = tmp_path / "calls.log"
+    btctl = _stub(tmp_path, "fake-bluetoothctl",
+                  f"#!/bin/sh\necho \"btctl $@\" >> {calls}\nexit 0\n")
+    catprint = _stub(tmp_path, "fake-catprint", "#!/bin/sh\nexit 0\n")
+    image = lr.render_label("Artist", "Album")
+    ok, _ = lr.print_label(image, catprint_bin=catprint, bluetoothctl_bin=btctl)
+    assert ok is True
+    assert not calls.exists()
+
+
+def test_print_label_survives_missing_or_failing_bluetoothctl(tmp_path, monkeypatch):
+    monkeypatch.delenv("WTUL_PRINTER_MAC", raising=False)
+    catprint = _stub(tmp_path, "fake-catprint", "#!/bin/sh\nexit 0\n")
+    image = lr.render_label("Artist", "Album")
+    # Missing binary: the disconnect is best-effort, the print still runs.
+    ok, _ = lr.print_label(image, catprint_bin=catprint,
+                            printer_mac="EA:F3:B6:A2:70:33",
+                            bluetoothctl_bin=str(tmp_path / "no-such-bluetoothctl"))
+    assert ok is True
+    # Failing binary (e.g. "Failed to disconnect: org.bluez.Error.NotConnected",
+    # the normal case when nothing was holding the printer): same story.
+    btctl = _stub(tmp_path, "fake-bluetoothctl-fail",
+                  "#!/bin/sh\necho 'Failed to disconnect' >&2\nexit 1\n")
+    ok, _ = lr.print_label(image, catprint_bin=catprint,
+                            printer_mac="EA:F3:B6:A2:70:33",
+                            bluetoothctl_bin=btctl)
+    assert ok is True
+
+
+def test_preprint_disconnect_reports_whether_a_connection_was_torn_down(tmp_path):
+    yes = _stub(tmp_path, "btctl-yes",
+                "#!/bin/sh\necho 'Successful disconnected'\nexit 0\n")
+    no = _stub(tmp_path, "btctl-no",
+               "#!/bin/sh\necho 'Failed to disconnect'\nexit 1\n")
+    assert lr._preprint_disconnect("EA:F3:B6:A2:70:33", bluetoothctl_bin=yes) is True
+    assert lr._preprint_disconnect("EA:F3:B6:A2:70:33", bluetoothctl_bin=no) is False
+    assert lr._preprint_disconnect("EA:F3:B6:A2:70:33",
+                                    bluetoothctl_bin=str(tmp_path / "missing")) is False

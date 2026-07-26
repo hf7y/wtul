@@ -272,17 +272,45 @@ def render_label_columns(artist, album, tracklist=None, discid=None, width=PRINT
     return strips
 
 
-def print_label(image, catprint_bin=None, timeout=30):
+def _preprint_disconnect(mac, bluetoothctl_bin="bluetoothctl", timeout=10):
+    """Best-effort `bluetoothctl disconnect <mac>` so catprint's own BLE
+    client isn't fighting a connection some other host-side actor already
+    holds. The M02 advertises a HID service UUID, so BlueZ's input plugin
+    auto-reconnects it whenever it advertises - independent of KDE's
+    trust-based reconnect, which is why untrusting the device didn't stop
+    it (QUESTIONS.md 2026-07-24). Returns True if a live connection was
+    actually torn down, False otherwise; never raises - a missing
+    bluetoothctl or an already-disconnected printer is the normal case,
+    not an error.
+    """
+    try:
+        proc = subprocess.run([bluetoothctl_bin, "disconnect", mac],
+                               capture_output=True, timeout=timeout, text=True)
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    return proc.returncode == 0 and "Successful disconnected" in proc.stdout
+
+
+def print_label(image, catprint_bin=None, timeout=30, printer_mac=None,
+                bluetoothctl_bin="bluetoothctl"):
     """Shells out to `catprint` (the BLE thermal-printer CLI) with the
     rendered image. Returns (True, None) on a clean exit, or
     (False, reason) on any failure - never raises, since a missing
     printer/BLE adapter must not abort a rip session. `catprint_bin`
     defaults to `~/.local/bin/catprint`, overridable for testing.
+
+    `printer_mac` (default: the WTUL_PRINTER_MAC env var) enables a
+    best-effort pre-print disconnect of any BLE connection something else
+    on this host is already holding to the printer - see
+    _preprint_disconnect. Leave unset to skip that step entirely.
     """
     catprint_bin = catprint_bin or os.path.join(
         os.path.expanduser("~"), ".local", "bin", "catprint")
     if not os.path.isfile(catprint_bin):
         return False, f"catprint not found at {catprint_bin}"
+    printer_mac = printer_mac or os.environ.get("WTUL_PRINTER_MAC", "").strip()
+    if printer_mac:
+        _preprint_disconnect(printer_mac, bluetoothctl_bin=bluetoothctl_bin)
     import tempfile
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         image.save(tmp.name)
