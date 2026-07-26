@@ -166,6 +166,47 @@ def test_session_log_is_written_and_marked_simulated(monkeypatch, tmp_path):
     assert "session finished - 3/3 tracks ripped" in body
 
 
+def test_prior_week_rip_is_symlinked_instead_of_reripped(monkeypatch, tmp_path, capsys):
+    """End-to-end rehearsal of the discid re-rip cache at its integration
+    point inside rip_session() - until now only its leaf functions
+    (find_prior_rip / symlink_prior_rip / write_discid_marker) had tests,
+    each alone, which is exactly the tested-apart-broken-together gap this
+    suite exists to close. A disc completed on an earlier show night must be
+    recognized by TOC discid and symlinked, not ripped again."""
+    spec_path = _write_spec(tmp_path)
+    mod = _load_rehearsal(monkeypatch, tmp_path, spec_path)
+    assert mod.rip_session(mod.DEV) is True
+    capsys.readouterr()
+
+    # Re-file today's completed rip as if it had happened on an earlier
+    # show night: today's dated dir is left empty, so only the .discid
+    # marker in the prior week's dir can connect the two.
+    prior_day = os.path.join(mod.MIXES_ROOT, "2026-07-10")
+    os.makedirs(prior_day)
+    os.rename(os.path.join(mod.RIPDIR, "Belong"),
+              os.path.join(prior_day, "Belong"))
+
+    mod2 = _load_rehearsal(monkeypatch, tmp_path, spec_path)
+    assert mod2.rip_session(mod2.DEV) is True
+    out = capsys.readouterr().out
+    assert "Disc already ripped on 2026-07-10" in out
+    assert "symlinked 3 track(s) instead of re-ripping" in out
+    assert "All tracks already ripped" in out
+    assert mod2.SIM.ripped == [], "the cache hit must prevent any re-rip"
+
+    today_dir = os.path.join(mod2.RIPDIR, "Belong", "October Language")
+    prior_dir = os.path.join(prior_day, "Belong", "October Language")
+    for name in ("01-I Never Lose.mp3", "02-Late Night.mp3",
+                 "03-Remove the Inside.mp3"):
+        link = os.path.join(today_dir, name)
+        assert os.path.islink(link)
+        assert os.readlink(link) == os.path.join(prior_dir, name)
+    # Today's dir gets its own marker too, so next week's cache lookup can
+    # hit either copy.
+    with open(os.path.join(today_dir, ".discid")) as f:
+        assert f.read().strip() == SPEC["discid"]
+
+
 def test_read_speed_line_reaches_the_log(monkeypatch, tmp_path):
     """#6's rip-speed monitoring parses these lines out of the session log;
     a rehearsal is the only way to produce one without a disc."""
