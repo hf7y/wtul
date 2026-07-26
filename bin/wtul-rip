@@ -22,6 +22,7 @@ import spinitron
 import metadata_lookup
 import catalog_writeback
 import label_render
+import fake_drive
 
 
 def _load_secrets_env(path):
@@ -54,13 +55,36 @@ HOME = os.path.expanduser("~")
 # history()) glob across MIXES_ROOT/*/ instead of just RIPDIR, since a disc
 # fixed today may have been ripped on an earlier show night.
 MIXES_ROOT = os.path.join(HOME, "Music", "mixes")
+
+# Rehearsal mode (WTUL_SIMULATE_DRIVE, see lib/fake_drive.py): no disc, no
+# drive, and - critically - a sandboxed MIXES_ROOT. Everything downstream
+# (RIPDIR, LOGDIR, album_dir_path, history(), fix_by_discid) is derived from
+# this one value, so redirecting it here is the whole containment: a
+# rehearsal physically cannot write a fake mp3 into the real mix folder that
+# gets burned to a CD, and its logs can't pollute the real rip history.
+SIMULATING = bool(os.environ.get(fake_drive.ENV_SPEC, "").strip())
+if SIMULATING:
+    MIXES_ROOT = fake_drive.sandbox_root()
+# The FakeDrive itself is built later, by init_simulation(), because it needs
+# album_dir_path() - defined further down - as its single source of truth for
+# where a track lands. None here means "not rehearsing"; every hardware call
+# site checks it.
+SIM = None
+
 RIPDIR = os.path.join(MIXES_ROOT, time.strftime("%Y-%m-%d"))
 LOGDIR = os.path.join(MIXES_ROOT, ".logs")
-LOCKFILE = f"/tmp/cd-autorip-{DEVNAME}.lock"
+# A separate lockfile: a rehearsal must not look like a real rip in progress
+# to a concurrently-running real wtul-rip, nor be blocked by one.
+LOCKFILE = f"/tmp/cd-autorip{'-sim' if SIMULATING else ''}-{DEVNAME}.lock"
 NOEJECT_CONF = os.path.join(HOME, ".abcde-noeject.conf")
 ACOUSTID_API_KEY = os.environ.get("ACOUSTID_API_KEY", "").strip()
 DISCOGS_TOKEN = os.environ.get("DISCOGS_TOKEN", "").strip()
 CATALOG_WRITEBACK_URL = os.environ.get("CATALOG_WRITEBACK_URL", "").strip()
+# Rehearsals never POST to the real rotation catalog (see rip_session). This
+# escape hatch is for the rehearsal test suite only, which injects a fake
+# write_row - it is deliberately not documented as a user-facing knob.
+SIMULATE_ALLOW_CATALOG = bool(
+    os.environ.get("WTUL_SIMULATE_ALLOW_CATALOG", "").strip())
 
 PER_TRACK_TIMEOUT = 900       # 15 min/track cap - a bad drive can't hang forever
 MAX_LOG_BYTES = 5_000_000     # matches the old wrapper's runaway-log cap
@@ -96,7 +120,14 @@ def sh(cmd, timeout=None):
     disc still asks), and without this it reads from wtul-rip's own
     controlling terminal - silently eating keystrokes meant for our own
     prompts and blocking on prompts you'd never see coming.
+
+    In rehearsal mode the simulated drive answers the hardware commands
+    (udevadm/cdparanoia/abcde/eject) instead of running them; anything it
+    doesn't recognise still runs for real, since a rehearsal has no reason
+    to fake e.g. a Discogs lookup.
     """
+    if SIM is not None and SIM.handles(cmd):
+        return SIM.run(cmd)
     try:
         p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             stdin=subprocess.DEVNULL, timeout=timeout, text=True)
@@ -594,6 +625,8 @@ def sh_live(cmd, logfile):
     limit by killing the child - that just shows up here as proc.stdout
     hitting EOF like any other process exit.
     """
+    if SIM is not None and SIM.handles(cmd):
+        return _sh_live_simulated(cmd, logfile)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                              stdin=subprocess.DEVNULL, text=True, bufsize=1)
     saw_error = False
@@ -627,6 +660,61 @@ def sh_live(cmd, logfile):
                 elif cmdline.strip():
                     pending.append(cmdline)
     return proc.wait(), saw_error, urgent, pending
+
+
+def _sh_live_simulated(cmd, logfile):
+    """sh_live()'s rehearsal twin: replay the simulator's lines with the same
+    printing, [ERROR] detection, log-capping and live-stdin handling, so the
+    session logic under test is identical either way.
+
+    stdin is still watched (non-blocking, between lines rather than via
+    select on a real pipe) because rehearsing the live `artist=`/`5 2`/`!q`
+    commands is one of the main things this mode is for.
+    """
+    rc, lines = SIM.stream(cmd)
+    saw_error = False
+    urgent = None
+    pending = []
+    written = os.path.getsize(logfile) if os.path.exists(logfile) else 0
+    with open(logfile, "a") as lf:
+        for line in lines:
+            print(f"    {line}")
+            if "[ERROR]" in line:
+                saw_error = True
+            if written < MAX_LOG_BYTES:
+                written += lf.write(line + "\n")
+            r, _, _ = select.select([sys.stdin], [], [], 0)
+            if not r:
+                continue
+            cmdline = sys.stdin.readline()
+            stripped = cmdline.strip().lower()
+            if stripped in ("!q", "!e"):
+                urgent = stripped[1]
+                break
+            elif cmdline.strip():
+                pending.append(cmdline)
+    return rc, saw_error, urgent, pending
+
+
+def init_simulation():
+    """Build the simulated drive if WTUL_SIMULATE_DRIVE is set.
+
+    Loud on a bad spec and never falls back to the real drive: silently
+    ripping a real disc when a rehearsal was asked for (or the reverse) is
+    the one failure mode here worth aborting over.
+    """
+    global SIM
+    if not SIMULATING:
+        return
+    try:
+        SIM = fake_drive.from_env(RIPDIR, album_dir_path, munge_fn=munge_filename)
+    except fake_drive.SpecError as e:
+        print(f"wtul-rip: {fake_drive.ENV_SPEC} is set but unusable: {e}",
+              file=sys.stderr)
+        print(f"Refusing to fall back to the real drive - unset "
+              f"{fake_drive.ENV_SPEC} to rip for real.", file=sys.stderr)
+        sys.exit(2)
+    print(SIM.banner())
 
 
 def rip_track(dev, discid, track, logfile):
@@ -669,11 +757,19 @@ def rip_session(dev):
             shutil.rmtree(d, ignore_errors=True)
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
-    logfile = os.path.join(LOGDIR, f"{stamp}-{DEVNAME}.log")
+    # SIMULATED goes in the filename, not just the body: history()'s recent-
+    # sessions list shows basenames, so a rehearsal has to be unmistakable
+    # there too rather than reading as a real rip that happened.
+    suffix = "-SIMULATED" if SIM is not None else ""
+    logfile = os.path.join(LOGDIR, f"{stamp}-{DEVNAME}{suffix}.log")
 
     print(f"Scraping metadata for {dev}...")
     rc, out = sh(["abcde", "-N", "-c", NOEJECT_CONF, "-d", dev, "-a", "cddb"], timeout=120)
     with open(logfile, "w") as lf:
+        if SIM is not None:
+            lf.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')}: SIMULATED REHEARSAL "
+                      f"({fake_drive.ENV_SPEC} set) - no disc was read, "
+                      f"not evidence of a real rip\n")
         lf.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')}: metadata scrape\n")
         lf.write(out)
 
@@ -823,7 +919,21 @@ def rip_session(dev):
         sh(["eject", dev])
         shutil.rmtree(tempdir, ignore_errors=True)
         print("All tracks ripped - disc ejected.")
-        if CATALOG_WRITEBACK_URL:
+        # Sandboxing RIPDIR is not enough on its own: this write-back is a
+        # POST to the real rotation-catalog sheet, so an otherwise contained
+        # rehearsal would still put a fake album in the station's live
+        # catalog - and #8 deliberately built no delete endpoint, so that row
+        # then has to come out by hand. Found exactly this way, by running a
+        # rehearsal for real on 2026-07-25 (it did log one junk row before
+        # this guard existed). Read-only lookups (Spinitron scrape, Discogs,
+        # AcoustID) are left alone - they change nothing outside this machine.
+        # The opt-in exists only so the rehearsal suite can still cover the
+        # "complete disc logs a row / partial disc does not" rule (it injects
+        # a fake write_row); it is never set in normal use.
+        if SIM is not None and not SIMULATE_ALLOW_CATALOG:
+            print("Catalog: write-back SUPPRESSED (rehearsal) - a simulated "
+                  "disc must never enter the real rotation catalog.")
+        elif CATALOG_WRITEBACK_URL:
             confirmed = catalog_writeback.write_row(CATALOG_WRITEBACK_URL, {
                 "ARTIST": artist.strip(),
                 "ALBUM": album.strip(),
@@ -836,14 +946,24 @@ def rip_session(dev):
                 print("Catalog: write-back failed or unreachable, not logged - "
                       "add it to the sheet by hand if it matters.")
         tracklist = [titles.get(n, f"Track {n}") for n in track_nums]
+        # Rendering stays: it's pure PIL, so a rehearsal exercises the label
+        # layout for free. Only the print itself is gated - catprint talks to
+        # the real M02 over BLE, and a simulated disc must not spend real
+        # label tape (same containment rule as the catalog write-back above;
+        # this gap appeared when label printing merged to main under the
+        # harness, caught by running a rehearsal for real on 2026-07-25).
         label = label_render.render_label(artist.strip(), album.strip(),
                                            tracklist=tracklist, discid=discid)
-        printed, reason = label_render.print_label(label)
-        if printed:
-            print("Label: printed.")
+        if SIM is not None:
+            print("Label: print SUPPRESSED (rehearsal) - a simulated disc "
+                  "never spends real label tape.")
         else:
-            print(f"Label: not printed ({reason}) - printer may be off/out of range, "
-                  "not a rip failure.")
+            printed, reason = label_render.print_label(label)
+            if printed:
+                print("Label: printed.")
+            else:
+                print(f"Label: not printed ({reason}) - printer may be off/out of range, "
+                      "not a rip failure.")
         return True
     else:
         print("Some tracks failed.")
@@ -1058,6 +1178,7 @@ def main():
 
 if __name__ == "__main__":
     try:
+        init_simulation()
         main()
     except KeyboardInterrupt:
         print()
