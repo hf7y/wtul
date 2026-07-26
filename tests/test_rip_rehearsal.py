@@ -555,3 +555,71 @@ def test_history_lists_the_rehearsed_disc(monkeypatch, tmp_path, capsys):
     assert "Belong" in out
     # The rehearsal's own session log must read as simulated here too.
     assert "SIMULATED" in out
+
+
+def test_fix_by_discid_musicbrainz_search_pick_becomes_the_suggestion(
+        monkeypatch, tmp_path, capsys):
+    """'? <text>' at the artist prompt (the third fallback, ROADMAP #2) runs
+    a MusicBrainz search; picking a row re-offers it as the suggestion, and
+    blank input at both prompts is what accepts it - confirm/edit, same as
+    every other suggestion source."""
+    pytest.importorskip("mutagen")
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.ACOUSTID_API_KEY = ""
+    monkeypatch.setattr(mod.metadata_lookup, "musicbrainz_search_release",
+                        lambda q, **k: [{"artist": "Real Band",
+                                         "album": "Real Record",
+                                         "year": "1997", "score": 100}])
+    answers = iter(["? real band record",  # artist prompt -> search
+                    "1",                   # pick the first result
+                    "",                    # artist prompt again -> accept
+                    ""])                   # album prompt -> accept
+    monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+    mod.fix_by_discid("700a8608")
+    out = capsys.readouterr().out
+    assert "Real Band - Real Record (1997)" in out
+    assert "suggestion now: Real Band - Real Record" in out
+    assert os.path.isdir(os.path.join(mod.RIPDIR, "Real Band", "Real Record"))
+
+
+def test_fix_by_discid_musicbrainz_no_match_falls_back_to_manual(
+        monkeypatch, tmp_path, capsys):
+    pytest.importorskip("mutagen")
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.ACOUSTID_API_KEY = ""
+    monkeypatch.setattr(mod.metadata_lookup, "musicbrainz_search_release",
+                        lambda q, **k: [])
+    answers = iter(["? gibberish nobody knows",  # search finds nothing
+                    "Manual Artist", "Manual Album"])
+    monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+    mod.fix_by_discid("700a8608")
+    out = capsys.readouterr().out
+    assert "No MusicBrainz match" in out
+    assert os.path.isdir(os.path.join(mod.RIPDIR, "Manual Artist", "Manual Album"))
+
+
+def test_fix_by_discid_musicbrainz_skipped_pick_changes_nothing(
+        monkeypatch, tmp_path, capsys):
+    """Blank at the pick prompt declines the search results; a bare '?'
+    prints usage. Neither plants a suggestion, so the eventual blank artist
+    input still refuses to guess."""
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.ACOUSTID_API_KEY = ""
+    monkeypatch.setattr(mod.metadata_lookup, "musicbrainz_search_release",
+                        lambda q, **k: [{"artist": "Tempting",
+                                         "album": "But Wrong",
+                                         "year": None, "score": 90}])
+    answers = iter(["?",             # bare '?' -> usage text
+                    "? tempting",    # search...
+                    "",              # ...but decline the pick
+                    "",              # artist prompt -> no suggestion to accept
+                    ""])             # album prompt -> blank
+    monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+    mod.fix_by_discid("700a8608")
+    out = capsys.readouterr().out
+    assert "usage: ? <search text>" in out
+    assert "No album given" in out
+    assert not os.path.isdir(os.path.join(mod.RIPDIR, "Tempting", "But Wrong"))

@@ -412,6 +412,32 @@ def apply_live_input(line, queue, tempdir, artist, album, titles, ripped, discid
     return artist, album, titles, None
 
 
+def musicbrainz_pick(query):
+    """Interactive picker over a MusicBrainz free-text release search - the
+    third identification fallback (after AcoustID and Discogs, ROADMAP #2)
+    for a disc neither service could match, and the only one needing no
+    key. Returns (artist, album) for the row the user picked, or None if
+    the search came back empty or the user skipped - the caller re-offers
+    a pick as an editable suggestion, never applies it blind."""
+    if not query:
+        print("  usage: ? <search text>   (artist/album words, e.g. read "
+              "off the cover)")
+        return None
+    print(f"  Searching MusicBrainz for '{query}'...")
+    results = metadata_lookup.musicbrainz_search_release(query)
+    if not results:
+        print("  No MusicBrainz match (or the search failed) - try different words.")
+        return None
+    for i, r in enumerate(results, 1):
+        year = f" ({r['year']})" if r.get("year") else ""
+        print(f"    {i}. {r['artist']} - {r['album']}{year}")
+    raw = input("  Use which one? (number, blank to skip): ").strip()
+    if raw.isdigit() and 1 <= int(raw) <= len(results):
+        r = results[int(raw) - 1]
+        return r["artist"], r["album"]
+    return None
+
+
 def fix_by_discid(discid):
     """Fix an already-completed unidentified disc after the fact - unlike
     live in-session edits, this works even after wtul-rip has moved on,
@@ -449,10 +475,26 @@ def fix_by_discid(discid):
                   "type in what you read below - not auto-filled):")
             for line in ocr_lines:
                 print(f"       {line}")
+        print("  -> tip: '? <text>' at the artist prompt searches MusicBrainz "
+              "(free-text, no key) - e.g. words read off the cover.")
 
-    artist_prompt = f"New artist (blank to use suggestion '{suggested_artist}'" \
-        if suggested_artist else "New artist (blank to keep 'Unknown Artist'"
-    new_artist = input(f"{artist_prompt}): ").strip() or suggested_artist or "Unknown Artist"
+    # The artist prompt doubles as a search box: '? <text>' runs a
+    # MusicBrainz free-text release search and, if the user picks a
+    # result, re-offers it as the suggestion - still confirm/edit like
+    # every other suggestion source, never applied blind.
+    while True:
+        artist_prompt = f"New artist (blank to use suggestion '{suggested_artist}'" \
+            if suggested_artist else "New artist (blank to keep 'Unknown Artist'"
+        raw_artist = input(f"{artist_prompt}, '? <text>' to search): ").strip()
+        if raw_artist.startswith("?"):
+            picked = musicbrainz_pick(raw_artist[1:].strip())
+            if picked:
+                suggested_artist, suggested_album = picked
+                print(f"  -> suggestion now: {suggested_artist} - {suggested_album} "
+                      f"(blank at the prompts accepts it)")
+            continue
+        break
+    new_artist = raw_artist or suggested_artist or "Unknown Artist"
     album_prompt = f"New album (blank to use suggestion '{suggested_album}'" \
         if suggested_album else "New album (blank to keep current"
     new_album = input(f"{album_prompt}): ").strip() or suggested_album

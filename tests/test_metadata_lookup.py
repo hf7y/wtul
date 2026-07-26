@@ -271,3 +271,90 @@ def test_resolve_disc_metadata_no_sleep_when_calls_already_spaced_out():
             ["/a.mp3", "/b.mp3"], acoustid_key="key",
             min_interval=0.35, sleep_fn=lambda s: (_ for _ in ()).throw(AssertionError("should not sleep")),
             clock=lambda: next(ticks))
+
+
+def _mb_release(artist="Radiohead", title="OK Computer", date="1997-05-21",
+                score=100, **extra):
+    rel = {"title": title, "score": score, "date": date,
+           "artist-credit": [{"name": artist}]}
+    rel.update(extra)
+    return rel
+
+
+def test_musicbrainz_search_parses_results():
+    body = {"releases": [_mb_release()]}
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse(body)):
+        results = ml.musicbrainz_search_release("radiohead ok computer")
+    assert results == [{"artist": "Radiohead", "album": "OK Computer",
+                        "year": "1997", "score": 100}]
+
+
+def test_musicbrainz_search_dedupes_pressings_and_caps_at_limit():
+    # One release typically appears once per pressing/country - the picker
+    # should show distinct (artist, album) rows, not five identical lines.
+    # Real pressings of one release differ by date/country, so the
+    # duplicates here deliberately do too - dedupe must key on
+    # (artist, album) alone, not on any pressing-level field.
+    body = {"releases": [_mb_release(date=f"199{i}-01-01") for i in range(4)]
+            + [_mb_release(title=f"Album {i}") for i in range(10)]}
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse(body)):
+        results = ml.musicbrainz_search_release("radiohead", limit=5)
+    assert len(results) == 5
+    assert results[0]["album"] == "OK Computer"
+    assert [r["album"] for r in results[1:]] == ["Album 0", "Album 1",
+                                                 "Album 2", "Album 3"]
+
+
+def test_musicbrainz_search_joins_multiple_artist_credits():
+    body = {"releases": [_mb_release(
+        **{"artist-credit": [{"name": "David Byrne"}, {"name": "Brian Eno"}]})]}
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse(body)):
+        results = ml.musicbrainz_search_release("bush of ghosts")
+    assert results[0]["artist"] == "David Byrne & Brian Eno"
+
+
+def test_musicbrainz_search_empty_query_never_hits_network():
+    with patch.object(ml.urllib.request, "urlopen",
+                      side_effect=AssertionError("should not be called")):
+        assert ml.musicbrainz_search_release("") == []
+        assert ml.musicbrainz_search_release("   ") == []
+
+
+def test_musicbrainz_search_no_results_returns_empty():
+    with patch.object(ml.urllib.request, "urlopen",
+                      return_value=_FakeResponse({"releases": []})):
+        assert ml.musicbrainz_search_release("nobody") == []
+
+
+def test_musicbrainz_search_network_error_returns_empty():
+    with patch.object(ml.urllib.request, "urlopen", side_effect=OSError("boom")):
+        assert ml.musicbrainz_search_release("radiohead") == []
+
+
+def test_musicbrainz_search_non_dict_json_returns_empty():
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse(["oops"])):
+        assert ml.musicbrainz_search_release("radiohead") == []
+
+
+def test_musicbrainz_search_malformed_entries_skipped():
+    # Same well-formed-but-wrong-shaped discipline as the AcoustID/Discogs
+    # parsers: stray non-dict entries, missing titles, credit lists holding
+    # junk, and short/garbage dates are all skipped, never raised on.
+    body = {"releases": [
+        "oops",
+        {"score": 90},                                        # no title
+        _mb_release(**{"artist-credit": "not-a-list"}),       # bad credits
+        _mb_release(**{"artist-credit": ["oops", {"x": 1}]}), # no usable name
+        _mb_release(artist="Real Artist", title="Real Album",
+                    date="199", score="high"),                # bad date+score
+    ]}
+    with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse(body)):
+        results = ml.musicbrainz_search_release("whatever")
+    assert results == [{"artist": "Real Artist", "album": "Real Album",
+                        "year": None, "score": None}]
+
+
+def test_musicbrainz_search_releases_not_a_list_returns_empty():
+    with patch.object(ml.urllib.request, "urlopen",
+                      return_value=_FakeResponse({"releases": {"oops": 1}})):
+        assert ml.musicbrainz_search_release("radiohead") == []
