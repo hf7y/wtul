@@ -633,3 +633,95 @@ def test_fix_by_discid_musicbrainz_skipped_pick_changes_nothing(
     assert "usage: ? <search text>" in out
     assert "No album given" in out
     assert not os.path.isdir(os.path.join(mod.RIPDIR, "Tempting", "But Wrong"))
+
+
+def _answers_then_eof(*answers):
+    """input() stand-in: yields the given answers, then raises EOFError -
+    what a real closed/Ctrl+D stdin does."""
+    it = iter(answers)
+
+    def fake(*a):
+        try:
+            return next(it)
+        except StopIteration:
+            raise EOFError
+    return fake
+
+
+def test_fix_by_discid_eof_at_artist_prompt_cancels_cleanly(
+        monkeypatch, tmp_path, capsys):
+    """Ctrl+D at the artist prompt must cancel the fix - not accept the
+    suggestion, and not escape as an EOFError that kills the watch loop
+    (the same class run 18 guarded on the partial-disc retry prompt)."""
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.ACOUSTID_API_KEY = "test-key"
+    monkeypatch.setattr(mod.metadata_lookup, "resolve_disc_metadata",
+                        lambda *a, **k: ("Suggested Artist", "Suggested Album"))
+    monkeypatch.setattr("builtins.input", _answers_then_eof())
+    mod.fix_by_discid("700a8608")  # must not raise
+    out = capsys.readouterr().out
+    assert "fix cancelled, nothing moved" in out
+    assert not os.path.isdir(os.path.join(mod.RIPDIR, "Suggested Artist"))
+    assert os.path.isdir(os.path.join(mod.RIPDIR, "Unknown Artist",
+                                      "Unknown Album (700a8608)"))
+
+
+def test_fix_by_discid_eof_at_album_prompt_cancels_cleanly(
+        monkeypatch, tmp_path, capsys):
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.ACOUSTID_API_KEY = ""
+    monkeypatch.setattr("builtins.input", _answers_then_eof("Real Artist"))
+    mod.fix_by_discid("700a8608")  # must not raise
+    out = capsys.readouterr().out
+    assert "fix cancelled, nothing moved" in out
+    assert not os.path.isdir(os.path.join(mod.RIPDIR, "Real Artist"))
+    assert os.path.isdir(os.path.join(mod.RIPDIR, "Unknown Artist",
+                                      "Unknown Album (700a8608)"))
+
+
+def test_fix_by_discid_eof_at_the_search_pick_skips_only_that_step(
+        monkeypatch, tmp_path, capsys):
+    """A single Ctrl+D at the pick prompt (a terminal sends exactly one EOF)
+    declines the results; manual entry afterward still works."""
+    pytest.importorskip("mutagen")
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    capsys.readouterr()
+    mod.ACOUSTID_API_KEY = ""
+    monkeypatch.setattr(mod.metadata_lookup, "musicbrainz_search_release",
+                        lambda q, **k: [{"artist": "Tempting",
+                                         "album": "But Wrong",
+                                         "year": None, "score": 90}])
+    answers = iter(["? tempting", EOFError, "Manual Artist", "Manual Album"])
+
+    def fake(*a):
+        nxt = next(answers)
+        if nxt is EOFError:
+            raise EOFError
+        return nxt
+    monkeypatch.setattr("builtins.input", fake)
+    mod.fix_by_discid("700a8608")
+    out = capsys.readouterr().out
+    assert "skipping the search results" in out
+    assert os.path.isdir(os.path.join(mod.RIPDIR, "Manual Artist",
+                                      "Manual Album"))
+    assert not os.path.isdir(os.path.join(mod.RIPDIR, "Tempting"))
+
+
+def test_fix_by_discid_glob_metachars_match_nothing(
+        monkeypatch, tmp_path, capsys):
+    """'fix *' must not glob onto some correctly-named album ("... (Deluxe
+    Edition)") and offer to move/retag the wrong folder - a typed discid is
+    matched literally."""
+    mod = _rehearse_unidentified(monkeypatch, tmp_path)
+    deluxe = os.path.join(mod.RIPDIR, "Some Artist", "Album (Deluxe Edition)")
+    os.makedirs(deluxe)
+    capsys.readouterr()
+    monkeypatch.setattr("builtins.input", _answers_then_eof())
+    mod.fix_by_discid("*")
+    out = capsys.readouterr().out
+    assert "No ripped album found" in out
+    assert os.path.isdir(deluxe)
+    assert os.path.isdir(os.path.join(mod.RIPDIR, "Unknown Artist",
+                                      "Unknown Album (700a8608)"))

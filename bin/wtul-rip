@@ -451,7 +451,12 @@ def musicbrainz_pick(query):
     for i, r in enumerate(results, 1):
         year = f" ({r['year']})" if r.get("year") else ""
         print(f"    {i}. {r['artist']} - {r['album']}{year}")
-    raw = input("  Use which one? (number, blank to skip): ").strip()
+    try:
+        raw = input("  Use which one? (number, blank to skip): ").strip()
+    except EOFError:
+        # Ctrl+D here means "none of these", not "crash the watch loop".
+        print("\n  (input closed - skipping the search results.)")
+        return None
     if raw.isdigit() and 1 <= int(raw) <= len(results):
         r = results[int(raw) - 1]
         return r["artist"], r["album"]
@@ -463,7 +468,11 @@ def fix_by_discid(discid):
     live in-session edits, this works even after wtul-rip has moved on,
     because the disc ID is baked into the "Unknown Album (discid)" folder
     name itself."""
-    matches = glob.glob(os.path.join(MIXES_ROOT, "*", "*", f"*({discid})"))
+    # The discid is typed by hand at the fix prompt: escaped so a stray
+    # glob metacharacter ('fix *') can't match some correctly-named album
+    # ("Album (Deluxe Edition)") and offer to move/retag the wrong folder.
+    matches = glob.glob(os.path.join(MIXES_ROOT, "*", "*",
+                                     f"*({glob.escape(discid)})"))
     if not matches:
         print(f"No ripped album found for disc ID '{discid}'.")
         return
@@ -505,7 +514,14 @@ def fix_by_discid(discid):
     while True:
         artist_prompt = f"New artist (blank to use suggestion '{suggested_artist}'" \
             if suggested_artist else "New artist (blank to keep 'Unknown Artist'"
-        raw_artist = input(f"{artist_prompt}, '? <text>' to search): ").strip()
+        try:
+            raw_artist = input(f"{artist_prompt}, '? <text>' to search): ").strip()
+        except EOFError:
+            # Ctrl+D cancels the fix; it must never accept a suggestion or
+            # take down the whole watch session (same class as the
+            # partial-disc retry prompt's EOF guard).
+            print("\n(input closed - fix cancelled, nothing moved.)")
+            return
         if raw_artist.startswith("?"):
             picked = musicbrainz_pick(raw_artist[1:].strip())
             if picked:
@@ -517,7 +533,11 @@ def fix_by_discid(discid):
     new_artist = raw_artist or suggested_artist or "Unknown Artist"
     album_prompt = f"New album (blank to use suggestion '{suggested_album}'" \
         if suggested_album else "New album (blank to keep current"
-    new_album = input(f"{album_prompt}): ").strip() or suggested_album
+    try:
+        new_album = input(f"{album_prompt}): ").strip() or suggested_album
+    except EOFError:
+        print("\n(input closed - fix cancelled, nothing moved.)")
+        return
     if not new_album:
         print("No album given, leaving as-is.")
         return
