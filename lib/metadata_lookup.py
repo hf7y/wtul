@@ -15,6 +15,12 @@ AcoustID found an artist but not a confident album - it can't identify
 anything AcoustID found nothing for. Missing key/token or fpcalc, or any
 network/API failure, degrades silently to (None, None) at every stage -
 the manual prompt is always the real fallback.
+
+When both come back empty, `musicbrainz_search_release()` is the third,
+human-driven fallback: a free-text release search (no key needed) over
+whatever the user types at the fix prompt - usually words read off the
+physical cover, or #7's OCR candidate lines. It returns candidates for
+the user to pick from, never an automatic answer.
 """
 import json
 import subprocess
@@ -26,6 +32,12 @@ from collections import Counter
 
 ACOUSTID_URL = "https://api.acoustid.org/v2/lookup"
 DISCOGS_SEARCH_URL = "https://api.discogs.com/database/search"
+MUSICBRAINZ_SEARCH_URL = "https://musicbrainz.org/ws/2/release/"
+# MusicBrainz rejects generic User-Agents and rate-limits anonymous clients
+# to ~1 req/s. Searches here are typed by a human at the fix prompt one at a
+# time (never fired per-track in a loop the way AcoustID is), so no
+# client-side throttle is needed - a human can't out-type 1 req/s.
+MUSICBRAINZ_USER_AGENT = "wtul-rip/1.0 (+https://github.com/hf7y/wtul)"
 # AcoustID's own 0-1 match confidence - a per-track guess below this isn't
 # trusted enough to count toward the album majority vote.
 DEFAULT_SCORE_THRESHOLD = 0.5
@@ -147,6 +159,67 @@ def discogs_search_by_artist(token, artist, base_url=DISCOGS_SEARCH_URL, timeout
     results = data.get("results", []) or []
     top = results[0] if results else None
     return top.get("title") if isinstance(top, dict) else None
+
+
+def musicbrainz_search_release(query, base_url=MUSICBRAINZ_SEARCH_URL, timeout=15, limit=5):
+    """Free-text release search against MusicBrainz - the third identification
+    fallback (after AcoustID and Discogs) for a disc neither service could
+    match, and the only one that needs no key or token at all. The query is
+    whatever the user typed at the fix prompt - typically words read off the
+    physical cover (or #7's OCR candidate lines) - so it's a plain full-text
+    search, not a fielded one.
+
+    Returns up to `limit` dicts {"artist", "album", "year", "score"},
+    best-scored first, de-duplicated on (artist, album) since one release
+    commonly appears once per pressing/country; [] on no match or any
+    network/shape error - same never-raise discipline as the Discogs client,
+    the manual prompt is always the real fallback."""
+    if not query or not query.strip():
+        return []
+    # Over-fetch so pressing-duplicates still leave `limit` distinct rows.
+    params = urllib.parse.urlencode({"query": query.strip(), "fmt": "json",
+                                     "limit": max(limit * 2, 10)})
+    req = urllib.request.Request(f"{base_url}?{params}",
+                                  headers={"User-Agent": MUSICBRAINZ_USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    releases = data.get("releases", []) or []
+    if not isinstance(releases, list):
+        return []
+    out, seen = [], set()
+    for rel in releases:
+        if not isinstance(rel, dict):
+            continue
+        title = rel.get("title")
+        if not isinstance(title, str) or not title.strip():
+            continue
+        credits = rel.get("artist-credit") or []
+        if not isinstance(credits, list):
+            continue
+        names = [c.get("name").strip() for c in credits
+                 if isinstance(c, dict) and isinstance(c.get("name"), str)
+                 and c.get("name").strip()]
+        if not names:
+            continue
+        artist = " & ".join(names)
+        date = rel.get("date")
+        year = date[:4] if isinstance(date, str) and len(date) >= 4 \
+            and date[:4].isdigit() else None
+        key = (artist.lower(), title.strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        score = rel.get("score")
+        out.append({"artist": artist, "album": title.strip(), "year": year,
+                    "score": score if isinstance(score, int) else None})
+        if len(out) >= limit:
+            break
+    return out
 
 
 def discogs_genre_year(token, artist, album=None, base_url=DISCOGS_SEARCH_URL, timeout=15):
