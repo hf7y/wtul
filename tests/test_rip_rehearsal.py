@@ -329,6 +329,21 @@ def test_rehearsal_never_posts_to_the_real_rotation_catalog(monkeypatch, tmp_pat
     assert "SUPPRESSED" in capsys.readouterr().out
 
 
+def test_rehearsal_never_prints_a_real_label(monkeypatch, tmp_path, capsys):
+    """Same containment class as the catalog leak above, arrived 2026-07-25
+    when label printing (#3) merged to main: print_label() shells out to the
+    real catprint/BLE printer, so a complete rehearsal disc would physically
+    print a junk label - wasting the label tape whose scarcity is already a
+    live complaint. Rendering is left in (pure PIL); only the print is gated."""
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    calls = []
+    monkeypatch.setattr(mod.label_render, "print_label",
+                        lambda *a, **k: calls.append(a) or (True, None))
+    assert mod.rip_session(mod.DEV) is True
+    assert calls == [], "a rehearsal must never invoke the real label printer"
+    assert "Label: print SUPPRESSED" in capsys.readouterr().out
+
+
 def test_catalog_writeback_fires_only_on_a_complete_disc(monkeypatch, tmp_path):
     """The underlying rule (a half-ripped album must not reach the rotation
     catalog), rehearsed with the suppression opted out of and write_row

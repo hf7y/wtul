@@ -881,14 +881,24 @@ def rip_session(dev):
                 print("Catalog: write-back failed or unreachable, not logged - "
                       "add it to the sheet by hand if it matters.")
         tracklist = [titles.get(n, f"Track {n}") for n in track_nums]
+        # Rendering stays: it's pure PIL, so a rehearsal exercises the label
+        # layout for free. Only the print itself is gated - catprint talks to
+        # the real M02 over BLE, and a simulated disc must not spend real
+        # label tape (same containment rule as the catalog write-back above;
+        # this gap appeared when label printing merged to main under the
+        # harness, caught by running a rehearsal for real on 2026-07-25).
         label = label_render.render_label(artist.strip(), album.strip(),
                                            tracklist=tracklist, discid=discid)
-        printed, reason = label_render.print_label(label)
-        if printed:
-            print("Label: printed.")
+        if SIM is not None:
+            print("Label: print SUPPRESSED (rehearsal) - a simulated disc "
+                  "never spends real label tape.")
         else:
-            print(f"Label: not printed ({reason}) - printer may be off/out of range, "
-                  "not a rip failure.")
+            printed, reason = label_render.print_label(label)
+            if printed:
+                print("Label: printed.")
+            else:
+                print(f"Label: not printed ({reason}) - printer may be off/out of range, "
+                      "not a rip failure.")
         return True
     else:
         print("Some tracks failed.")
