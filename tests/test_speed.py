@@ -166,3 +166,52 @@ def test_real_logs_parse_without_error():
         for r in recs:
             assert r["status"] in ("ok", "failed", "timeout", "interrupted", "unknown")
             assert r["final"] is None or r["final"] > 0
+
+
+# --- legacy log dir (pre-2026-07-24 ripped->mixes migration) ---
+# Every log written before the migration lives at ~/Music/ripped/.logs and
+# nothing moves them; on a machine that hasn't ripped since, LOGDIR doesn't
+# even exist yet. The report has to read both or all history is invisible.
+
+MINIMAL_LOG = ("=== track 1 ===\n"
+               "  100/100 (100%)|0:00/0:00|0:00/0:00|   {speed}x|0:00\n"
+               "track 1 ripped OK\n")
+
+
+def _write_log(dirpath, name, speed, mtime):
+    os.makedirs(dirpath, exist_ok=True)
+    path = os.path.join(dirpath, name)
+    with open(path, "w") as f:
+        f.write(MINIMAL_LOG.format(speed=speed))
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+def test_load_speed_sessions_merges_dirs_in_mtime_order(tmp_path):
+    legacy = str(tmp_path / "ripped" / ".logs")
+    current = str(tmp_path / "mixes" / ".logs")
+    # Interleaved on purpose: legacy, current, legacy would be wrong if the
+    # merge sorted per-directory instead of globally.
+    _write_log(legacy, "a.log", "10.000", 1000)
+    _write_log(current, "b.log", "20.000", 2000)
+    _write_log(legacy, "c.log", "30.000", 3000)
+    sessions = wtul.load_speed_sessions(legacy, current)
+    assert [name for name, _ in sessions] == ["a.log", "b.log", "c.log"]
+
+
+def test_speed_report_reads_legacy_dir_when_current_missing(tmp_path, monkeypatch, capsys):
+    legacy = str(tmp_path / "ripped" / ".logs")
+    _write_log(legacy, "old.log", "23.500", 1000)
+    monkeypatch.setattr(wtul, "LEGACY_LOGDIR", legacy)
+    monkeypatch.setattr(wtul, "LOGDIR", str(tmp_path / "mixes" / ".logs"))
+    wtul.speed_report()
+    out = capsys.readouterr().out
+    assert "No rip logs yet" not in out
+    assert "overall median 23.5x" in out
+
+
+def test_speed_report_no_logs_anywhere(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(wtul, "LEGACY_LOGDIR", str(tmp_path / "nope1"))
+    monkeypatch.setattr(wtul, "LOGDIR", str(tmp_path / "nope2"))
+    wtul.speed_report()
+    assert "No rip logs yet" in capsys.readouterr().out

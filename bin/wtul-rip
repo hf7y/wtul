@@ -76,6 +76,11 @@ SIM = None
 
 RIPDIR = os.path.join(MIXES_ROOT, time.strftime("%Y-%m-%d"))
 LOGDIR = os.path.join(MIXES_ROOT, ".logs")
+# Rip logs from before the 2026-07-24 ripped->mixes migration stay at the
+# old location, untouched (see FOCUS.md #6). New logs never land there, but
+# the speed report reads it too - otherwise every rip before the migration
+# is invisible to exactly the kind of over-time comparison the report is for.
+LEGACY_LOGDIR = os.path.join(HOME, "Music", "ripped", ".logs")
 # A separate lockfile: a rehearsal must not look like a real rip in progress
 # to a concurrently-running real wtul-rip, nor be blocked by one.
 LOCKFILE = f"/tmp/cd-autorip{'-sim' if SIMULATING else ''}-{DEVNAME}.lock"
@@ -1211,11 +1216,16 @@ def format_speed_report(sessions):
     return "\n".join(out)
 
 
-def load_speed_sessions(logdir):
-    """Read every rip log under logdir, parse each, and return
-    [(name, records), ...] sorted chronologically by filename time."""
+def load_speed_sessions(*logdirs):
+    """Read every rip log under the given dir(s), parse each, and return
+    [(name, records), ...] sorted chronologically by file mtime across all
+    of them - so pre-migration sessions (LEGACY_LOGDIR) and current ones
+    (LOGDIR) interleave in real order rather than per-directory."""
+    paths = []
+    for logdir in logdirs:
+        paths.extend(glob.glob(os.path.join(logdir, "*.log")))
     sessions = []
-    for path in sorted(glob.glob(os.path.join(logdir, "*.log")), key=os.path.getmtime):
+    for path in sorted(paths, key=os.path.getmtime):
         try:
             with open(path, "r", errors="replace") as f:
                 text = f.read()
@@ -1228,10 +1238,11 @@ def load_speed_sessions(logdir):
 
 
 def speed_report():
-    if not os.path.isdir(LOGDIR):
+    logdirs = [d for d in (LEGACY_LOGDIR, LOGDIR) if os.path.isdir(d)]
+    if not logdirs:
         print("No rip logs yet - nothing to report on.")
         return
-    sessions = load_speed_sessions(LOGDIR)
+    sessions = load_speed_sessions(*logdirs)
     print()
     print(format_speed_report(sessions))
     print()
