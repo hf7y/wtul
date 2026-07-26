@@ -365,3 +365,61 @@ hand.
   the input plugin lose interest) - flagging that as the first experiment
   for that session rather than doing it unattended, since with the printer
   absent there'd be no way to re-pair or verify anything.
+
+- **2026-07-26 (wtul-batch, run 20): main was BROKEN when this run started -
+  fixed (`3f42a90`), but the cause needs your eyes on the auto-merger.** The
+  three branches merged since run 19 (`discid-rerip-cache`,
+  `m02-preprint-disconnect`, `rip-rehearsal-harness`, all tagged
+  `[autonomy-tier:high, gate:tests-passed]`) were each green alone but
+  broken together: completed discs now write a `.discid` marker, which the
+  rehearsal tests' exact-listing assertions didn't expect (3 failures on
+  main). Whatever runs that tests-passed gate evidently checks each branch
+  before its own merge but does not re-run the suite on the merged result -
+  the classic semantic-merge gap. **Worth fixing in the merger itself**: a
+  post-merge suite run on main would have caught this at merge time. The
+  same gap also broke `rip-speed-monitoring` far worse after rebase (24
+  failures, below). No decision needed on the fix itself; the flag is about
+  the merge gate.
+- **2026-07-26 (wtul-batch, run 20): real production bug found under the
+  same failures, fixed on `main` (`3f42a90`) - no hardware needed, none
+  cleared.** `fix_by_discid()` moved only `*.mp3` out of an "Unknown Album"
+  dir, so the `.discid` marker stayed behind: the emptied dir survived its
+  cleanup, and - the real harm - `find_prior_rip()` would later match that
+  marker and "already ripped" a re-inserted disc against a dir with no
+  music in it, instead of the corrected folder. The marker now follows the
+  moved music; rehearsal tests assert its presence/content; mutation-
+  checked. Revert: `git revert 3f42a90`.
+- **2026-07-26 (wtul-batch, run 20): `rip-speed-monitoring` rebased +
+  repaired (`dcce0db`, 222/222) - STILL HARDWARE-GATED for merge, but its
+  live print now rehearses.** Two things under one commit (`ad160fd`): (a)
+  the branch widened `sh_live()` to return 5 values but main's now-merged
+  rehearsal twin still returned 4, so every rehearsal on the rebased branch
+  crashed at the first track (24 failures); (b) FakeDrive emitted its speed
+  sample as prose that SPEED_RE never matched, so the live `(read speed
+  N.Nx)` print - the branch's headline feature - silently never fired under
+  rehearsal: the same harness-agrees-with-itself blind spot as run 18's
+  mungefilename lesson. FakeDrive now emits cdparanoia's real `|N.Nx|`
+  format, and a rehearsal witnesses the print for real. The milestone
+  criterion is unchanged: a real rip is still the gate.
+- **2026-07-26 (wtul-batch, run 20): third member of the rehearsal
+  containment class, fixed on `web-photo-capture` (`ac85159`).** With
+  `PHOTO_CAPTURE_URL` set in secrets.env, a complete rehearsal disc would
+  have printed a pairing URL against the real GAS endpoint - inviting a
+  phone upload keyed to a discid that doesn't exist (same class as the
+  catalog row and the label print, same cause: main's features moving onto
+  a rehearsed path). Pairing is now suppressed under rehearsal,
+  regression-tested like its two predecessors.
+- **2026-07-26 (wtul-batch, run 20): #10 (show-run sheet sweeper-prime web
+  UI) - proposing defaults so one reply unblocks the build.** FOCUS.md
+  gates this on three decisions; here is a concrete default for each, pick
+  or veto per line: (a) *sheet read*: a bound Apps Script web app on the
+  run-sheet serving row JSON via doGet - the exact pattern #8's
+  catalog-writeback.gs.js already uses, no OAuth, needs only the
+  run-sheet's URL from you (it isn't recorded anywhere in this repo); (b)
+  *"cache"*: browser-held - the page fetches the next sweeper clip into a
+  Blob/object-URL wired to an `<audio>` element, so playback is instant
+  but the tab must stay open through the show (a to-disk cache for an
+  external player would be a different build); (c) *where it runs*: any
+  browser pointed at the GAS `/exec` URL, same hosting shape as #4/#8, no
+  new server. Reply with the run-sheet URL + yes/veto per default and the
+  next run builds it; silence keeps it deferred, not guessed at.

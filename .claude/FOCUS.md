@@ -176,6 +176,32 @@ and were fixed in the process, plus one new mitigation branch:
    KDE trust — which explains why `bluetoothctl untrust` didn't stop the
    reconnects. Hardware-gated for verification.
 
+**Update (2026-07-26, run 20): main was broken on arrival; fixed, plus a
+real `fix_by_discid` bug under it.** The three merges since run 19
+(`discid-rerip-cache`, `m02-preprint-disconnect`, `rip-rehearsal-harness`,
+all `[autonomy-tier:high, gate:tests-passed]`) were each green alone but
+broken together - the `.discid` marker vs the rehearsal suite's
+exact-listing assertions (3 failures). Under it, a real bug:
+`fix_by_discid()` left the `.discid` marker behind when moving a corrected
+rip, so `find_prior_rip()` would later match a music-less dir instead of
+the corrected folder. Both fixed on `main` (`3f42a90`); the merged refs
+pruned per the standing rule. The auto-merger's gate evidently doesn't
+re-run the suite on the *merged result* - flagged in QUESTIONS.md as the
+thing actually worth fixing. Same gap hit `rip-speed-monitoring` harder
+on rebase (24 failures: `sh_live` 5-tuple vs the rehearsal twin's 4) -
+fixed on the branch (`ad160fd`), which also made FakeDrive emit
+cdparanoia's real `|N.Nx|` speed format so #6's live speed print now
+rehearses (it silently never fired under rehearsal before - SPEED_RE
+never matched the harness's prose). `web-photo-capture` gained the third
+member of the rehearsal containment class (photo pairing suppressed,
+`ac85159`); `main` gained an end-to-end rehearsal of the re-rip cache at
+its `rip_session()` seam (`6aba41d`). All three surviving branches
+rebased to 0-behind `main`, suites green from scratch:
+`rip-speed-monitoring` `dcce0db` (222), `web-photo-capture` `3ab221a`
+(230), `ocr-metadata-extraction` `2c49499` (255). Milestone criteria
+unchanged - both still gated on a real rip. #10 unblock proposal (one
+reply builds it) appended to QUESTIONS.md.
+
 *(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
 it doesn't fit wtul's own read of its bar.)*
 
