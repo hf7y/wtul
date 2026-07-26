@@ -202,6 +202,26 @@ rebased to 0-behind `main`, suites green from scratch:
 unchanged - both still gated on a real rip. #10 unblock proposal (one
 reply builds it) appended to QUESTIONS.md.
 
+**Update (2026-07-26, run 21): main absorbed #4+#7 cleanly; one branch
+left plus one new one.** The auto-merger merged `ocr-metadata-extraction`
+(which contains `web-photo-capture`) to `main` (`81cdcc6`) - and unlike
+run 20's arrival, the merged result re-verified GREEN from scratch
+(255/255 plus a witnessed full demo rehearsal: sandboxed rip, catalog and
+label both SUPPRESSED). The difference is run 20's strict-0-behind
+policy: no semantic drift left for the merger's no-post-merge-test gap
+to trip over; that gap itself is still flagged and unfixed. Both merged
+refs pruned. `rip-speed-monitoring` rebased onto the new tip (keep-both
+conflicts in `bin/wtul-rip` again), 270/270 from scratch, live speed
+print re-witnessed under rehearsal - new tip `4f96cf1`. So #4/#7's code
+is now ON `main`: what parks them is no longer branch drift, just the
+real phone/cover-photo session they always needed. New branch
+`musicbrainz-fallback` (`07f880d`): a keyless MusicBrainz free-text
+search wired into `fix <discid>` as the third fallback (after
+AcoustID/Discogs, per QUESTIONS.md's 2026-07-24 fallback-service entry)
+- `? <text>` at the artist prompt lists candidates to pick as an
+editable suggestion; client live-verified against the real API. Both
+milestone criteria unchanged, still gated on a real rip.
+
 *(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
 it doesn't fit wtul's own read of its bar.)*
 

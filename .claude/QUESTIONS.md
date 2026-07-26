@@ -423,3 +423,35 @@ hand.
   browser pointed at the GAS `/exec` URL, same hosting shape as #4/#8, no
   new server. Reply with the run-sheet URL + yes/veto per default and the
   next run builds it; silence keeps it deferred, not guessed at.
+
+- **2026-07-26 (wtul-batch, run 21): built the third metadata-fix fallback
+  on new branch `musicbrainz-fallback` (`5a872c8` + `07f880d`) - answers
+  the 2026-07-24 "fallback metadata service" entry in its own suggested
+  "MusicBrainz direct search by typed title" shape.** When AcoustID and
+  Discogs both come back empty in `fix <discid>`, typing `? <text>` at the
+  artist prompt (e.g. words read off the cover, or #7's OCR lines printed
+  just above) now runs a keyless MusicBrainz free-text release search and
+  offers numbered candidates; a pick becomes an editable suggestion, never
+  applied blind - same confirm/edit discipline as #2/#7. 12 new tests
+  (client shape-guards + 3 interactive rehearsal tests), two mutations
+  verified caught, and the client was live-verified against the real
+  MusicBrainz API (no key: "radiohead ok computer" -> one deduped
+  `Radiohead - OK Computer (1997)` row). **The search itself needs no
+  hardware; the full `fix <discid>` flow against a real freshly-ripped
+  disc remains part of #2's existing real-rip gate - this doesn't clear
+  it.** No decision needed from you.
+- **2026-07-26 (wtul-batch, run 21): the auto-merger merged #4+#7
+  (`ocr-metadata-extraction`, which contains `web-photo-capture`) into
+  `main` (`81cdcc6`) - and this time the merged result is GREEN (255/255
+  re-run from scratch), unlike run 20's broken arrival.** Difference: run
+  20 had left every branch strictly 0-behind, so the merge had no semantic
+  drift to trip over - evidence the 0-behind policy is what makes the
+  merger's no-post-merge-test gap survivable. The run-20 flag on that gap
+  stands. Merged refs pruned local+origin per the standing rule;
+  `rip-speed-monitoring` (the last pre-existing branch) rebased onto the
+  new main - same keep-both conflict class as before - and re-verified
+  270/270 with the live speed print witnessed under rehearsal again; new
+  tip `4f96cf1` (pre-rebase `dcce0db` to revert). Full demo rehearsal on
+  merged main also witnessed: sandboxed rip, catalog + label both
+  SUPPRESSED. Since #4's code is now on `main`, the phone-capture flow is
+  one live session away from producing the real cover.jpg #7 needs.
