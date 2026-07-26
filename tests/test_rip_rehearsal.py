@@ -217,6 +217,16 @@ def test_read_speed_line_reaches_the_log(monkeypatch, tmp_path):
     assert "4.2x" in body
 
 
+def test_live_read_speed_print_fires_under_rehearsal(monkeypatch, tmp_path, capsys):
+    """#6's live per-track "(read speed N.Nx)" print previously only ever ran
+    with a real disc. FakeDrive emits the speed sample in cdparanoia's real
+    |N.Nx| status format (what SPEED_RE actually matches), so the print - not
+    just the log line - rehearses without a drive."""
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    mod.rip_session(mod.DEV)
+    assert "(read speed 4.2x)" in capsys.readouterr().out
+
+
 # -- the unhappy paths, which a real disc rarely reproduces on demand ---
 
 

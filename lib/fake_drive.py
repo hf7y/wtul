@@ -423,7 +423,11 @@ class FakeDrive:
         lines = [
             f"Grabbing track {track_num}: {track['title']}...",
             "cdparanoia III release 10.2 (simulated)",
-            f"  ... reading track {track_num} at {speed}x",
+            # The "|N.Nx|" sample mimics cdparanoia's real status-line format
+            # (what SPEED_RE in bin/wtul-rip matches) rather than this
+            # harness's own prose - so #6's live speed print and log parser
+            # rehearse against the shape the real tool emits.
+            f"  ... reading track {track_num} at |{speed}x|",
         ]
         if track["fails"]:
             lines += [
