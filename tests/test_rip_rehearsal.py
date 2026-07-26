@@ -391,6 +391,24 @@ def test_rehearsal_never_prints_a_real_label(monkeypatch, tmp_path, capsys):
     assert "Label: print SUPPRESSED" in capsys.readouterr().out
 
 
+def test_rehearsal_never_pairs_photo_capture(monkeypatch, tmp_path, capsys):
+    """Third member of the same containment class (catalog row 2026-07-25,
+    label print 2026-07-25): with PHOTO_CAPTURE_URL set in the real
+    secrets.env, a complete rehearsal disc would print a pairing URL against
+    the real GAS endpoint and invite a phone upload keyed to a discid that
+    doesn't exist. Pairing is gated; nothing else about the rip changes."""
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    mod.PHOTO_CAPTURE_URL = "https://example.com/exec"
+    calls = []
+    monkeypatch.setattr(mod.photo_capture, "new_pairing_code",
+                        lambda *a, **k: calls.append(a) or "zzz999")
+    assert mod.rip_session(mod.DEV) is True
+    out = capsys.readouterr().out
+    assert calls == [], "a rehearsal must never issue a real pairing code"
+    assert "Photo capture: pairing SUPPRESSED" in out
+    assert "open https://" not in out
+
+
 def test_catalog_writeback_fires_only_on_a_complete_disc(monkeypatch, tmp_path):
     """The underlying rule (a half-ripped album must not reach the rotation
     catalog), rehearsed with the suppression opted out of and write_row
