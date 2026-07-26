@@ -292,7 +292,10 @@ def test_musicbrainz_search_parses_results():
 def test_musicbrainz_search_dedupes_pressings_and_caps_at_limit():
     # One release typically appears once per pressing/country - the picker
     # should show distinct (artist, album) rows, not five identical lines.
-    body = {"releases": [_mb_release() for _ in range(4)]
+    # Real pressings of one release differ by date/country, so the
+    # duplicates here deliberately do too - dedupe must key on
+    # (artist, album) alone, not on any pressing-level field.
+    body = {"releases": [_mb_release(date=f"199{i}-01-01") for i in range(4)]
             + [_mb_release(title=f"Album {i}") for i in range(10)]}
     with patch.object(ml.urllib.request, "urlopen", return_value=_FakeResponse(body)):
         results = ml.musicbrainz_search_release("radiohead", limit=5)
