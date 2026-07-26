@@ -455,3 +455,38 @@ hand.
   merged main also witnessed: sandboxed rip, catalog + label both
   SUPPRESSED. Since #4's code is now on `main`, the phone-capture flow is
   one live session away from producing the real cover.jpg #7 needs.
+
+- **2026-07-26 (wtul-batch, run 22): the auto-merger merged the
+  hardware-gated milestone branch - a gate-order inversion worth your
+  eyes, though nothing is broken.** `rip-speed-monitoring` (`82c771e`)
+  and `musicbrainz-fallback` (`ea00116`) were both merged to `main` by
+  the tests-passed auto-merger since run 21 - but the milestone
+  criterion explicitly said "hardware-verified against a real rip,
+  *then* merged", and run 21 had deliberately held `musicbrainz-fallback`
+  back too. The merged result is fine (re-verified from scratch here:
+  282/282, demo rehearsal witnessed with the live speed print firing and
+  catalog/label suppressed, `speed` report re-witnessed against the real
+  37-log history), refs pruned per the standing rule, nothing to revert.
+  But the tests-passed gate evidently doesn't distinguish
+  hardware-gated branches from ordinary ones, so from now on "it's on
+  main" no longer implies "it's been watched working on real hardware".
+  The judgment call for you: should the auto-merger skip branches whose
+  QUESTIONS.md/FOCUS.md entries flag them hardware-gated (or honor some
+  marker to that effect), or is merge-early-verify-on-main acceptable
+  going forward? The next real rip remains the actual verification
+  either way. (This is the second auto-merger flag; run 20's
+  no-post-merge-test gap still stands.)
+- **2026-07-26 (wtul-batch, run 22): two real bugs found stress-testing
+  the newly-merged fix flow, fixed on `main` (`1c4f488`) - NO hardware
+  verification needed, and none cleared.** (a) Ctrl+D at any of `fix
+  <discid>`'s three prompts (artist, album, MusicBrainz pick) raised an
+  uncaught EOFError that killed the entire watch session mid-show-night
+  - the same class run 18 guarded on the partial-disc retry prompt,
+  reintroduced by the new prompts; artist/album EOF now cancels the fix
+  cleanly (never silently accepts a suggestion), pick EOF just declines
+  the results. (b) The typed discid went into `glob.glob` unescaped, so
+  `fix *` matched any parenthesized album name ("Album (Deluxe
+  Edition)") and would have offered to move/retag the wrong folder; now
+  matched literally via `glob.escape`. 4 regression tests, each
+  mutation-checked against the pre-fix code. Revert: `git revert
+  1c4f488`. No decision needed from you.

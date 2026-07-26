@@ -7,8 +7,10 @@
 Done when:
 - [x] FOCUS.md/ROADMAP.md reconciliation done (thin pointer above, kept
       2026-07-24)
-- [ ] rip-speed monitoring (`rip-speed-monitoring` branch) hands-on
-      hardware-verified against a real rip, then merged
+- [ ] rip-speed monitoring hands-on hardware-verified against a real
+      rip (code merged to `main` by the auto-merger 2026-07-26, `82c771e`,
+      BEFORE that verification - the gate is now verify-on-main, no branch
+      left to merge)
 - [ ] metadata-fix API (#2) built against Discogs (decided 2026-07-24,
       token already in hand) and live-verified against a real rip
 
@@ -221,6 +223,26 @@ AcoustID/Discogs, per QUESTIONS.md's 2026-07-24 fallback-service entry)
 - `? <text>` at the artist prompt lists candidates to pick as an
 editable suggestion; client live-verified against the real API. Both
 milestone criteria unchanged, still gated on a real rip.
+
+**Update (2026-07-26, run 22): the auto-merger merged BOTH remaining
+branches (`musicbrainz-fallback` `ea00116`, then `rip-speed-monitoring`
+`82c771e`) - zero feature branches left; the whole backlog's code is now
+on `main`.** The merged result re-verified GREEN from scratch (282/282,
+full demo rehearsal witnessed: sandboxed rip, live `(read speed 4.2x)`
+print firing, catalog + label SUPPRESSED; `speed` report re-witnessed
+against the real 37-log history). Both refs pruned local+origin per the
+standing rule. **Note the gate-order inversion**: the speed criterion
+said hardware-verify *then* merge; the merger's tests-passed gate
+doesn't know about hardware gates, so "merged" no longer implies
+"hardware-verified" - flagged in QUESTIONS.md. Stress-testing the
+newly-merged fix-flow found two real bugs, fixed on `main` (`1c4f488`):
+Ctrl+D at any of the three fix prompts raised an uncaught EOFError that
+killed the whole watch session (run 18's partial-disc class,
+reintroduced), and the typed discid hit `glob.glob` unescaped, so
+`fix *` could match a correctly-named "Album (Deluxe Edition)" folder
+and offer to move/retag the wrong music. 4 regression tests,
+mutation-checked. Milestone criteria otherwise unchanged - both still
+gated on a real rip.
 
 *(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
 it doesn't fit wtul's own read of its bar.)*
