@@ -67,6 +67,15 @@ DEMO_SPEC = {
         {"title": "Simulated Track Two", "length": "4:05"},
         {"title": "Simulated Track Three", "length": "2:48"},
     ],
+    # What Spinitron "already played" during this rehearsal. Deliberately
+    # credited with drift the disc's own metadata does not carry ("The "
+    # prefix, an "&" for "and", a bracketed guest credit) so the demo
+    # exercises spinitron._similarity's fuzzy path rather than a string
+    # compare that would pass even if the matcher were broken.
+    "spins": [
+        {"artist": "The Rehearsal Artist", "song": "Simulated Track Two (Live)"},
+        {"artist": "Somebody Else Entirely", "song": "A Song Not On This Disc"},
+    ],
 }
 
 
@@ -122,6 +131,40 @@ def load_spec(value):
             "fails": bool(t.get("fails", False)),
         })
 
+    # Spins the rehearsal should pretend Spinitron is reporting. Without this
+    # a rehearsal reached the real spinitron.com over the network - read-only,
+    # so never a leak, but it made every rehearsal depend on what happened to
+    # be airing, and in practice meant #1's match/reorder path was never
+    # rehearsed at all (a simulated album never matches a real broadcast).
+    # Absent/empty is a legitimate spec: it rehearses "nothing was played".
+    spins_raw = raw.get("spins") or []
+    if not isinstance(spins_raw, list):
+        # A dict or a string would otherwise iterate into keys/characters and
+        # fail with a per-item message that blames the wrong thing.
+        raise SpecError(f"disc spec 'spins' must be a list, got "
+                        f"{type(spins_raw).__name__}")
+    spins = []
+    for i, sp in enumerate(spins_raw, start=1):
+        # bool before int, or JSON's `true` silently becomes "track 1".
+        if isinstance(sp, bool):
+            raise SpecError(f"spin {i} must be an object or a track number, "
+                            f"got a boolean")
+        if isinstance(sp, int):
+            # Shorthand: a track number on this disc, credited exactly as the
+            # disc credits it. Convenient, but an exact-string match - prefer
+            # the dict form when the point is to exercise fuzzy matching.
+            if not 1 <= sp <= len(tracks):
+                raise SpecError(f"spin {i}: track {sp} is not on this disc "
+                                f"(1-{len(tracks)})")
+            spins.append({"artist": str(raw.get("artist") or "").strip(),
+                          "song": tracks[sp - 1]["title"]})
+            continue
+        if not isinstance(sp, dict):
+            raise SpecError(f"spin {i} must be an object with 'artist'/'song', "
+                            f"or a track number, got {type(sp).__name__}")
+        spins.append({"artist": str(sp.get("artist") or "").strip(),
+                      "song": str(sp.get("song") or "").strip()})
+
     discid = str(raw.get("discid") or "").strip()
     if not re.fullmatch(r"[0-9a-fA-F]{8}", discid):
         raise SpecError(f"disc spec 'discid' must be 8 hex digits, got {discid!r}")
@@ -138,6 +181,7 @@ def load_spec(value):
         "disc_present": bool(raw.get("disc_present", True)),
         "read_speed": str(raw.get("read_speed") or "4.2").strip(),
         "tracks": tracks,
+        "spins": spins,
     }
 
 
