@@ -21,18 +21,10 @@ only thing that should ever remove something from this file. To dismiss
 a question without any action, you can still just delete its line by
 hand.
 
-- **2026-07-18 (wtul-batch):** Built ROADMAP #6 (rip-speed monitoring) on branch `rip-speed-monitoring`. Adds `wtul-rip speed` (+ interactive `speed`) reporting per-session/overall median extraction speed from existing logs, slow-track flags, and a degradation warning; plus a live `(read speed N.Nx)` line per track. Parser is unit-tested against real logs. NEEDS HANDS-ON HARDWARE VERIFICATION: the live per-track print only fires during a real rip with a disc — merge/trust after you've watched one real rip. No decision needed from you.
 - **2026-07-18 (wtul-batch):** Deferred, needs your decision before I build (a genuine either/or, not "should I"): (a) ROADMAP #2 metadata-fix API — AcoustID/Chromaprint (needs `fpcalc`, NOT installed here, + an AcoustID key) vs Discogs API (needs a Discogs token); pick one. **(a) RESOLVED 2026-07-24: Discogs, token already in hand — see FOCUS.md's stability milestone, which now lists #2/Discogs as a milestone criterion still needing build + live-verification.** (b) ROADMAP #8 catalog spreadsheet — where does the sheet live and its format/columns (Google Sheets + OAuth vs local .csv/.xlsx)? (c) ROADMAP #3 label printer — which printer model? (d) ROADMAP #4/#7 web-photo/OCR — need a phone + hosting decision. **(b)/(c)/(d) RECLASSIFIED 2026-07-24 (realisateur): (parked)** — all three sit past wtul's current stability milestone (rip-speed monitoring + Discogs metadata-fix only), already named in FOCUS.md's parked list; no longer presented as blocking decisions until the milestone is reached and a new one promotes them into the active set. #3/#4/#7 remain hardware-gated regardless.
+> (b) https://docs.google.com/spreadsheets/d/19QfbBhZpTJZYFuTkWuerD73z3AN_tGl3n8t5cq3dwKI/edit?gid=591596929#gid=591596929 . This is the Working Local Catalog which tracks albums: #	ARTIST	ALBUM	LABEL	YEAR	Rating	GENRE	MERIT	LOCAL	COMMENT	DATE	DJ NAME	HOME . Updates should include under DJ NAME "Guy" (my dj name) and DATE can be the date entered. (c) Phomemo m02 (d) phone is android but host on webapp via apps script preferably. https://script.google.com/u/0/home/projects/1ed2WEziF9LVxsAm_RdAXmh4y61GZevBSD8NRvZJn6x4UcE7sdPQDH9uE/edit existing HUD here could have a tabbed page design. 
 
 
-
-- **2026-07-19 (Spinitron API key): acknowledged, mine to get.** #1's
-  wiring is built and unit-tested (`SPINITRON_API_KEY` env var, silent
-  no-op until set) but has never been called against the real API. User
-  will obtain the station's Spinitron API key + station ID directly
-  (Settings > API in Spinitron, per ROADMAP.md #1) -- not something a
-  nightly run can do. No need to keep flagging this as blocking; once the
-  key is set in the environment, the next rip will exercise it live.
 - **2026-07-22 (wtul-batch): wtul has no `.claude/FOCUS.md` -- deliberately not
   building one yet.** Flagged by scheduler's `scheduler status` (its
   "next up" parser needs a Current-focus/Priority/Backlog structure it
