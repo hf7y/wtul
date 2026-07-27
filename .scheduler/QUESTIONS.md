@@ -671,3 +671,16 @@ hand.
   blocked by this run's own sandbox. Flagging rather than silently
   skipping — `git branch -d` + `git push origin :<name>` on both,
   whenever convenient.
+- **2026-07-27 (realisateur /cloture):** `CD-500_500B_Manual_RevG.pdf` has
+  been sitting uncommitted at this repo's root (~10h old HEAD otherwise)
+  since before this session. Flagged by realisateur's `closeout-lint.sh`
+  scan of registered repos, not by anything of wtul's own — wtul has no
+  inbox-intake mechanism analogous to realisateur's `nightly-batch.md` §2
+  (repo-root artifact scan); `wtul-batch` is backlog-driven off this
+  FOCUS.md only, so a dropped file here is invisible to it. Two separate
+  questions:
+  > 1. This specific file — commit it as reference material, or was it
+  >    meant to trigger something (a scan/idea-inference) that doesn't
+  >    exist yet for wtul?
+  > 2. Standing: should wtul grow a realisateur-style inbox-scan step, or
+  >    is backlog-only intake the intended shape for this project?
