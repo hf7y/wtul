@@ -506,3 +506,51 @@ def test_streaming_an_unhandled_command_raises(tmp_path):
 def test_timeout_wrapper_with_no_inner_command_is_not_claimed(tmp_path):
     d, _ = _drive(tmp_path)
     assert not d.handles(["timeout", "900"])
+
+
+# --- spins: what Spinitron "played" during a rehearsal (FOCUS #1) ----------
+
+def test_spins_default_to_empty():
+    spec = _parse(_spec(spins=None))
+    assert spec["spins"] == []
+
+
+def test_spin_objects_are_normalised_to_artist_song():
+    spec = _parse(_spec(
+        spins=[{"artist": "  belong ", "song": "Late Night", "extra": 1}]))
+    assert spec["spins"] == [{"artist": "belong", "song": "Late Night"}]
+
+
+def test_spin_track_number_shorthand_uses_the_discs_own_credits():
+    spec = _parse(_spec(spins=[2]))
+    assert spec["spins"] == [{"artist": spec["artist"],
+                              "song": spec["tracks"][1]["title"]}]
+
+
+def test_spin_track_number_off_the_disc_is_an_error():
+    for bad in (0, 99, -1):
+        with pytest.raises(fake_drive.SpecError):
+            _parse(_spec(spins=[bad]))
+
+
+def test_spins_that_are_not_a_list_are_an_error():
+    for bad in ({"artist": "x"}, "belong", 7):
+        with pytest.raises(fake_drive.SpecError):
+            _parse(_spec(spins=bad))
+
+
+def test_spin_entry_of_the_wrong_type_is_an_error():
+    for bad in (None, ["a", "b"], True):
+        with pytest.raises(fake_drive.SpecError):
+            _parse(_spec(spins=[bad]))
+
+
+def test_demo_spec_carries_spins_that_are_not_string_identical():
+    """The built-in demo has to exercise the fuzzy match, not a string compare
+    - otherwise `WTUL_SIMULATE_DRIVE=demo` would look like it rehearses #1
+    while proving nothing about it."""
+    spec = fake_drive.load_spec("demo")
+    titles = {t["title"] for t in spec["tracks"]}
+    assert spec["spins"]
+    assert not any(s["song"] in titles and s["artist"] == spec["artist"]
+                   for s in spec["spins"])

@@ -64,8 +64,10 @@ def _load_rehearsal(monkeypatch, tmp_path, spec_path):
     # A real selectable stdin at EOF: rip_session() and _sh_live_simulated()
     # both select() on sys.stdin, and pytest's captured stdin has no fileno.
     monkeypatch.setattr(mod.sys, "stdin", open(os.devnull))
-    # Spinitron is a live network scrape inside rip_session() - a rehearsal
-    # must not depend on the station's website being up.
+    # Belt and braces: recent_spins() already serves a rehearsal from the disc
+    # spec rather than the network, but a test that reached the real
+    # spinitron.com because of some future regression would be flaky, not
+    # loud. See test_rehearsal_never_reaches_the_real_spinitron.
     monkeypatch.setattr(mod.spinitron, "fetch_recent_spins_public", lambda *a, **k: [])
 
     mod.init_simulation()
@@ -340,7 +342,10 @@ def test_spinitron_failure_does_not_abort_the_rip(monkeypatch, tmp_path, capsys)
     def boom(*a, **k):
         raise OSError("no network")
 
-    monkeypatch.setattr(mod.spinitron, "fetch_recent_spins_public", boom)
+    # Patched at recent_spins(), not at the scrape underneath it: a rehearsal
+    # no longer reaches the network at all, so poisoning the scrape would
+    # quietly test nothing. rip_session()'s own handler is what's under test.
+    monkeypatch.setattr(mod, "recent_spins", boom)
     assert mod.rip_session(mod.DEV) is True
     out = capsys.readouterr().out
     assert "Spinitron lookup failed" in out
@@ -967,3 +972,73 @@ def test_fix_by_discid_glob_metachars_match_nothing(
     assert os.path.isdir(deluxe)
     assert os.path.isdir(os.path.join(mod.RIPDIR, "Unknown Artist",
                                       "Unknown Album (700a8608)"))
+
+
+# --- Rehearsed spins (FOCUS #1: the reorder path a rehearsal never ran) -----
+
+def test_rehearsal_never_reaches_the_real_spinitron(monkeypatch, tmp_path):
+    """The scrape is read-only, so this was never a leak like the catalog POST
+    - it was a rehearsal whose result depended on what was airing, on a
+    machine that may have no network at all."""
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+
+    def tripwire(*a, **k):
+        raise AssertionError("rehearsal reached the real Spinitron page")
+
+    monkeypatch.setattr(mod.spinitron, "fetch_recent_spins_public", tripwire)
+    assert mod.rip_session(mod.DEV) is True
+
+
+def test_spec_spins_drive_the_match_and_are_reported(monkeypatch, tmp_path, capsys):
+    """The spec's spins are credited with drift the disc does not carry, so a
+    hit here means the fuzzy matcher ran - not that two strings were equal."""
+    spec = _write_spec(tmp_path, spins=[
+        {"artist": "belong", "song": "Late Night (Radio Edit)"},
+    ])
+    mod = _load_rehearsal(monkeypatch, tmp_path, spec)
+    assert mod.rip_session(mod.DEV) is True
+    out = capsys.readouterr().out
+    assert "Spinitron: 1 track(s) already played on air: 2" in out
+
+
+def test_no_spins_in_spec_rehearses_nothing_played(monkeypatch, tmp_path, capsys):
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path, spins=[]))
+    assert mod.rip_session(mod.DEV) is True
+    out = capsys.readouterr().out
+    assert "already played on air" not in out
+    assert "Spinitron lookup failed" not in out
+
+
+def test_track_number_shorthand_credits_the_disc_exactly(monkeypatch, tmp_path, capsys):
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path, spins=[3]))
+    assert mod.rip_session(mod.DEV) is True
+    assert "already played on air: 3" in capsys.readouterr().out
+
+
+def test_recent_spins_falls_back_to_no_spins_without_a_fake_drive(monkeypatch, tmp_path):
+    """`catalog`/`speed`/`doctor` rehearse without ever building SIM. Returning
+    [] rather than falling through to the network keeps "a rehearsal touches
+    nothing outside this machine" true with no asterisk - the same SIM-is-None
+    hole that produced run 25's live-sheet POST."""
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    monkeypatch.setattr(mod, "SIM", None)
+
+    def tripwire(*a, **k):
+        raise AssertionError("fell through to the network with SIM unset")
+
+    monkeypatch.setattr(mod.spinitron, "fetch_recent_spins_public", tripwire)
+    assert mod.recent_spins() == []
+
+
+def test_real_run_still_uses_the_live_scrape(monkeypatch, tmp_path):
+    """The whole point is that only a rehearsal is diverted."""
+    monkeypatch.setattr("sys.argv", ["wtul-rip"])
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("WTUL_SIMULATE_DRIVE", raising=False)
+    loader = SourceFileLoader("wtul_rip_real_spins", _MODPATH)
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    monkeypatch.setattr(mod.spinitron, "fetch_recent_spins_public",
+                        lambda *a, **k: [{"artist": "A", "song": "B"}])
+    assert mod.recent_spins() == [{"artist": "A", "song": "B"}]

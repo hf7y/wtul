@@ -130,6 +130,31 @@ def rehearsing():
     return SIMULATING
 
 
+def recent_spins():
+    """Recent Spinitron spins - from the rehearsal's disc spec when rehearsing,
+    from the station's public page otherwise. Raises what the live scrape
+    raises; every caller already treats a failure as "no spins, carry on".
+
+    The scrape is read-only, so reaching the real Spinitron during a rehearsal
+    was never a leak in the sense the five guarded side effects were. It was
+    the other failure: a rehearsal whose output depended on what happened to
+    be on air, on a machine that may have no network at all - and, because a
+    simulated album never matches a real broadcast, #1's match-and-reorder
+    path was the one part of rip_session() that a "complete" rehearsal
+    silently never exercised. Same shape as run 20's speed print, which never
+    fired under rehearsal because FakeDrive emitted prose SPEED_RE couldn't
+    match: a rehearsal that runs a code path zero times looks identical to one
+    that runs it correctly.
+
+    SIM is None while rehearsing on an entry point that never built the fake
+    drive; return no spins rather than falling through to the network, so the
+    "a rehearsal touches nothing outside this machine" story has no asterisk.
+    """
+    if rehearsing():
+        return list(SIM.spec["spins"]) if SIM else []
+    return spinitron.fetch_recent_spins_public()
+
+
 RIPDIR = os.path.join(MIXES_ROOT, time.strftime("%Y-%m-%d"))
 LOGDIR = os.path.join(MIXES_ROOT, ".logs")
 # Rip logs from before the 2026-07-24 ripped->mixes migration stay at the
@@ -1026,7 +1051,7 @@ def rip_session(dev):
     # audio fingerprinting or a maintained-feed earcon, is future work, see
     # QUESTIONS.md - this is deliberately the simple version for now).
     try:
-        spins = spinitron.fetch_recent_spins_public()
+        spins = recent_spins()
     except (urllib.error.URLError, OSError, ValueError) as e:
         print(f"Spinitron lookup failed ({e}), ripping full disc in track order.")
     else:
@@ -1600,7 +1625,7 @@ def check_for_new_spins(seen_spin_keys, quiet_errors=True):
     history as if it just happened.
     """
     try:
-        spins = spinitron.fetch_recent_spins_public()
+        spins = recent_spins()
     except (urllib.error.URLError, ValueError, OSError) as e:
         if not quiet_errors:
             print(f"  (spin check failed: {e})")

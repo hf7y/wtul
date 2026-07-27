@@ -9,5 +9,11 @@
     { "title": "I Never Lose", "length": "3:00" },
     { "title": "Late Night", "length": "2:30" },
     { "title": "Remove the Inside", "length": "4:10", "fails": false }
+  ],
+
+  "_spins": "What Spinitron should report as already played on air during this rehearsal (FOCUS #1). Rename to 'spins' to use it. Object form credits a spin the way a DJ would type it - deliberately NOT identical to the disc's own metadata, so the fuzzy matcher is what has to make the match. Integer form is shorthand for 'track N, credited exactly as this disc credits it'. Omit or leave empty to rehearse 'nothing was played'. A rehearsal never reaches the real spinitron.com either way.",
+  "spins": [
+    { "artist": "belong", "song": "Late Night (Radio Edit)" },
+    3
   ]
 }
