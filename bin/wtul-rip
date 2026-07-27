@@ -52,7 +52,15 @@ _load_secrets_env(os.path.join(os.path.expanduser("~"), ".config", "wtul", "secr
 # `wtul-rip doctor` would set DEV=/dev/doctor and the preflight would
 # report a missing drive that is actually sitting right there
 # (`speed` got away with it only because it never looks at DEV).
-SUBCOMMANDS = {"speed", "doctor"}
+# Argv subcommands, in dispatch precedence order. This is the single source
+# for both halves of subcommand handling: _parse_device() below must not
+# mistake a subcommand name for a device name, and __main__ at the bottom
+# dispatches by looking each of these up in _SUBCOMMAND_HANDLERS (a name
+# here with no handler there fails loudly rather than falling through to the
+# watch loop). Keeping the two in one list is not cosmetic - "catalog" was
+# added to the dispatch on 2026-07-27 and not here, so `wtul-rip catalog`
+# ran with DEV=/dev/catalog and its own bogus lockfile.
+SUBCOMMANDS = ("speed", "catalog", "doctor")
 
 
 def _parse_device(argv):
@@ -90,6 +98,37 @@ if SIMULATING:
 # where a track lands. None here means "not rehearsing"; every hardware call
 # site checks it.
 SIM = None
+
+
+def rehearsing():
+    """True when this process is a rehearsal, on EVERY entry point.
+
+    The one question every real-world side effect (the rotation-catalog
+    POST, the M02 label print, the phone-pairing endpoint) must ask before
+    it fires. It exists because there are two plausible ways to ask it and
+    only one of them is right:
+
+      SIMULATING       - set at import from WTUL_SIMULATE_DRIVE, so it is
+                         true no matter which entry point ran.
+      SIM is not None  - the FakeDrive object, built by init_simulation(),
+                         which only the watch loop calls. `wtul-rip
+                         catalog`, `speed` and `doctor` all exit before it.
+
+    Five separate leaks have now come from a side effect asking the second
+    question (2026-07-25's catalog write-back and label print, run 19's
+    harness print, run 20's photo pairing, run 25's `catalog` subcommand,
+    which POSTed a simulated album at the live sheet). Every one was found
+    by running it, none by reading it. So the question is asked here, once,
+    and tests/test_rehearsal_guard_audit.py enumerates the entry points and
+    runs each of them against poisoned side effects - a new command that
+    forgets to ask fails the suite instead of waiting for a show night.
+
+    Use `SIM` itself only where the fake *drive* is what's needed (a
+    command to answer, a stream to replay), never to decide whether
+    something outside this machine may be touched.
+    """
+    return SIMULATING
+
 
 RIPDIR = os.path.join(MIXES_ROOT, time.strftime("%Y-%m-%d"))
 LOGDIR = os.path.join(MIXES_ROOT, ".logs")
@@ -915,13 +954,13 @@ def rip_session(dev):
     # SIMULATED goes in the filename, not just the body: history()'s recent-
     # sessions list shows basenames, so a rehearsal has to be unmistakable
     # there too rather than reading as a real rip that happened.
-    suffix = "-SIMULATED" if SIM is not None else ""
+    suffix = "-SIMULATED" if rehearsing() else ""
     logfile = os.path.join(LOGDIR, f"{stamp}-{DEVNAME}{suffix}.log")
 
     print(f"Scraping metadata for {dev}...")
     rc, out = sh(["abcde", "-N", "-c", NOEJECT_CONF, "-d", dev, "-a", "cddb"], timeout=120)
     with open(logfile, "w") as lf:
-        if SIM is not None:
+        if rehearsing():
             lf.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')}: SIMULATED REHEARSAL "
                       f"({fake_drive.ENV_SPEC} set) - no disc was read, "
                       f"not evidence of a real rip\n")
@@ -1085,7 +1124,7 @@ def rip_session(dev):
         # The opt-in exists only so the rehearsal suite can still cover the
         # "complete disc logs a row / partial disc does not" rule (it injects
         # a fake write_row); it is never set in normal use.
-        if SIM is not None and not SIMULATE_ALLOW_CATALOG:
+        if rehearsing() and not SIMULATE_ALLOW_CATALOG:
             print("Catalog: write-back SUPPRESSED (rehearsal) - a simulated "
                   "disc must never enter the real rotation catalog.")
         elif CATALOG_WRITEBACK_URL:
@@ -1129,7 +1168,7 @@ def rip_session(dev):
         # harness, caught by running a rehearsal for real on 2026-07-25).
         label = label_render.render_label(artist.strip(), album.strip(),
                                            tracklist=tracklist, discid=discid)
-        if SIM is not None:
+        if rehearsing():
             print("Label: print SUPPRESSED (rehearsal) - a simulated disc "
                   "never spends real label tape.")
         else:
@@ -1143,7 +1182,7 @@ def rip_session(dev):
             # Same containment rule as the catalog write-back and label print
             # above: a rehearsal must not invite a real phone upload against
             # the real GAS endpoint for a disc that doesn't exist.
-            if SIM is not None:
+            if rehearsing():
                 print("Photo capture: pairing SUPPRESSED (rehearsal) - a "
                       "simulated disc never pairs against the real endpoint.")
             else:
@@ -1203,6 +1242,16 @@ def check_pending_photos():
     if not PHOTO_CAPTURE_URL:
         print("PHOTO_CAPTURE_URL not set - nothing to check.")
         return
+    # Defence in depth, added 2026-07-27 by the guard audit. Today a
+    # rehearsal cannot get here with work to do - pairing is suppressed at
+    # the other end, so the sandboxed pending file stays empty - which means
+    # this guard's absence was invisible while depending on a suppression
+    # two functions away staying correct. That is the shape of all five
+    # prior leaks. Ask the question here too.
+    if rehearsing():
+        print("Photo capture: check SUPPRESSED (rehearsal) - a simulated "
+              "disc never polls the real endpoint.")
+        return
     pending = _load_pending_photos()
     if not pending:
         print("No pending photo pairings.")
@@ -1257,7 +1306,7 @@ def catalog_retry(quiet_when_empty=False):
     # read the sandboxed outbox and then flushed it against the real URL.
     # SIMULATING is set at import from the env var, so it is true on every
     # entry point.
-    if SIMULATING and not SIMULATE_ALLOW_CATALOG:
+    if rehearsing() and not SIMULATE_ALLOW_CATALOG:
         print("   Retry SUPPRESSED (rehearsal) - rerun without "
               "WTUL_SIMULATE_DRIVE to flush these.")
         return
@@ -1687,23 +1736,32 @@ def main():
               f"rips, 'q' to quit.\n")
 
 
-if __name__ == "__main__":
+# One handler per SUBCOMMANDS entry, keyed by the same name so the two can't
+# drift apart (see SUBCOMMANDS at the top for what drifting apart cost). Each
+# returns the process exit status. All three exit before init_simulation(),
+# which is exactly why every side effect they can reach asks rehearsing()
+# rather than checking SIM.
+_SUBCOMMAND_HANDLERS = {
     # `wtul-rip speed` prints the extraction-speed report from past logs and
     # exits - a read-only view that needs no drive, disc, or watch loop.
-    args = sys.argv[1:]
-    if "speed" in args:
-        speed_report()
-        sys.exit(0)
+    "speed": lambda args: speed_report() or 0,
     # `wtul-rip catalog` retries any rip whose catalog row never landed and
     # exits - no drive, no disc, no watch loop, so it can be run from a
     # laptop the morning after a show once the network is back.
-    if "catalog" in args:
-        catalog_retry()
-        sys.exit(0)
+    "catalog": lambda args: catalog_retry() or 0,
     # `wtul-rip doctor` answers "is this rig ready?" with no disc and no
     # watch loop, and exits nonzero if it isn't - so it can gate a script.
-    if "doctor" in args:
-        sys.exit(doctor(check_net="--no-net" not in args))
+    "doctor": lambda args: doctor(check_net="--no-net" not in args),
+}
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    for _name in SUBCOMMANDS:
+        if _name in args:
+            # KeyError here rather than a silent fall-through to the watch
+            # loop: a subcommand listed with no handler is a build error.
+            sys.exit(_SUBCOMMAND_HANDLERS[_name](args))
     try:
         init_simulation()
         main()
