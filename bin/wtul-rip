@@ -104,6 +104,12 @@ NOEJECT_CONF = os.path.join(HOME, ".abcde-noeject.conf")
 ACOUSTID_API_KEY = os.environ.get("ACOUSTID_API_KEY", "").strip()
 DISCOGS_TOKEN = os.environ.get("DISCOGS_TOKEN", "").strip()
 CATALOG_WRITEBACK_URL = os.environ.get("CATALOG_WRITEBACK_URL", "").strip()
+# The sheet's DJ NAME column. Answered 2026-07-27 in QUESTIONS.md ("under
+# DJ NAME 'Guy' (my dj name)"); an env override exists only so a second DJ
+# using this tool doesn't have to edit the source, not because the default
+# is uncertain. An empty value is respected - it writes no DJ NAME at all
+# rather than silently falling back to someone else's name.
+CATALOG_DJ_NAME = os.environ.get("WTUL_DJ_NAME", "Guy").strip()
 # Rehearsals never POST to the real rotation catalog (see rip_session). This
 # escape hatch is for the rehearsal test suite only, which injects a fake
 # write_row - it is deliberately not documented as a user-facing knob.
@@ -1075,12 +1081,18 @@ def rip_session(dev):
             print("Catalog: write-back SUPPRESSED (rehearsal) - a simulated "
                   "disc must never enter the real rotation catalog.")
         elif CATALOG_WRITEBACK_URL:
-            confirmed = catalog_writeback.write_row(CATALOG_WRITEBACK_URL, {
+            row = {
                 "ARTIST": artist.strip(),
                 "ALBUM": album.strip(),
                 "DATE": time.strftime("%Y-%m-%d"),
                 "LOCAL": True,
-            })
+            }
+            # DJ NAME is the sheet's own column header, space and all - the
+            # GAS endpoint matches incoming keys to headers by name, so the
+            # key has to read exactly as the header does.
+            if CATALOG_DJ_NAME:
+                row["DJ NAME"] = CATALOG_DJ_NAME
+            confirmed = catalog_writeback.write_row(CATALOG_WRITEBACK_URL, row)
             if confirmed:
                 print("Catalog: logged to sheet.")
             else:
