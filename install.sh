@@ -59,7 +59,22 @@ if [ ! -f "$HOME/.abcde.conf" ]; then
     install -m 644 abcde.conf "$HOME/.abcde.conf"
     echo "installed $HOME/.abcde.conf"
 else
-    echo "$HOME/.abcde.conf already exists — left it alone. Compare against abcde.conf in this repo if rips aren't behaving as expected."
+    # "Left it alone" used to be the whole story, and it silently ate the
+    # 2026-07-24 ripped->mixes migration: the repo's OUTPUTDIR moved, the
+    # installed copy didn't, and rips would have landed in ~/Music/ripped
+    # while wtul-rip looked in ~/Music/mixes/<date>. Never overwrite a
+    # config someone may have hand-edited - but never stay quiet about a
+    # drift that breaks every rip either.
+    echo "$HOME/.abcde.conf already exists — left it alone."
+    if ! diff -q "$HOME/.abcde.conf" abcde.conf >/dev/null; then
+        echo
+        echo "WARNING: it differs from this repo's abcde.conf:"
+        diff -u "$HOME/.abcde.conf" abcde.conf | sed 's/^/    /' || true
+        echo
+        echo "    Run 'wtul-rip doctor' to see whether the difference actually"
+        echo "    breaks a rip (it checks OUTPUTDIR/WAVOUTPUTDIR against the"
+        echo "    directory wtul-rip reads back)."
+    fi
 fi
 
 # wtul-rip always calls abcde with -c ~/.abcde-noeject.conf so abcde never
@@ -72,7 +87,11 @@ sudo systemctl daemon-reload
 
 cat <<'EOF'
 
-Installed. To rip discs:
+Installed. Before a show, check the rig is actually ready (no disc needed):
+  wtul-rip doctor          - full preflight; exits nonzero if a rip can't work
+  wtul-rip doctor --no-net - same, skipping the metadata-service probes
+
+To rip discs:
   wtul-rip
 
 If the drive isn't /dev/sr0 (e.g. a second/external drive, or an Apple
