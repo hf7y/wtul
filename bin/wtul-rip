@@ -26,6 +26,7 @@ import label_render
 import fake_drive
 import photo_capture
 import ocr_metadata
+import preflight
 
 
 def _load_secrets_env(path):
@@ -46,7 +47,22 @@ def _load_secrets_env(path):
 
 _load_secrets_env(os.path.join(os.path.expanduser("~"), ".config", "wtul", "secrets.env"))
 
-DEV = f"/dev/{sys.argv[1]}" if len(sys.argv) > 1 else "/dev/sr0"
+# Subcommand words and flags are NOT device names. Without this,
+# `wtul-rip doctor` would set DEV=/dev/doctor and the preflight would
+# report a missing drive that is actually sitting right there
+# (`speed` got away with it only because it never looks at DEV).
+SUBCOMMANDS = {"speed", "doctor"}
+
+
+def _parse_device(argv):
+    for arg in argv[1:]:
+        if arg in SUBCOMMANDS or arg.startswith("-"):
+            continue
+        return f"/dev/{arg}"
+    return "/dev/sr0"
+
+
+DEV = _parse_device(sys.argv)
 DEVNAME = os.path.basename(DEV)
 HOME = os.path.expanduser("~")
 # Rips land directly in a dated mix folder (2026-07-24: what gets ripped on a
@@ -1316,6 +1332,45 @@ def speed_report():
     print()
 
 
+def _lock_is_stale(path):
+    """True if the lockfile exists but nothing holds its flock - i.e. it
+    was left behind by a killed session rather than a live rip."""
+    lock = Lock(path)
+    if lock.acquire():
+        lock.release()
+        return True
+    return False
+
+
+def doctor_context(check_net=True):
+    return preflight.Context(
+        dev=DEV,
+        home=HOME,
+        mixes_root=MIXES_ROOT,
+        ripdir=RIPDIR,
+        abcde_conf=os.path.join(HOME, ".abcde.conf"),
+        noeject_conf=NOEJECT_CONF,
+        lockfile=LOCKFILE,
+        environ=os.environ,
+        simulating=SIMULATING,
+        check_net=check_net,
+        stale_tempdir_secs=STALE_TEMPDIR_SECS,
+        lock_is_stale=_lock_is_stale,
+    )
+
+
+def doctor(check_net=True):
+    """Preflight: is this rig ready to rip, without needing a disc?
+    Returns the process exit code - nonzero if anything FAILed, so a
+    scripted `wtul-rip doctor || ...` is meaningful."""
+    checks = preflight.run_checks(doctor_context(check_net=check_net))
+    print()
+    print(f"=== wtul-rip preflight ({DEV}) ===")
+    print(preflight.format_report(checks))
+    print()
+    return 1 if preflight.worst_status(checks) == preflight.FAIL else 0
+
+
 def history():
     try:
         from mutagen.easyid3 import EasyID3
@@ -1531,9 +1586,14 @@ def main():
 if __name__ == "__main__":
     # `wtul-rip speed` prints the extraction-speed report from past logs and
     # exits - a read-only view that needs no drive, disc, or watch loop.
-    if len(sys.argv) > 1 and sys.argv[1] == "speed":
+    args = sys.argv[1:]
+    if "speed" in args:
         speed_report()
         sys.exit(0)
+    # `wtul-rip doctor` answers "is this rig ready?" with no disc and no
+    # watch loop, and exits nonzero if it isn't - so it can gate a script.
+    if "doctor" in args:
+        sys.exit(doctor(check_net="--no-net" not in args))
     try:
         init_simulation()
         main()

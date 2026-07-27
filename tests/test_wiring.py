@@ -257,3 +257,52 @@ def test_pending_photos_roundtrip(monkeypatch, tmp_path):
     assert len(pending) == 1
     assert pending[0]["pairing_code"] == "abc123"
     assert pending[0]["disc_id"] == "disc-1"
+
+
+def test_preflight_module_importable_from_wtul_rip(monkeypatch):
+    mod = _load_wtul_rip(monkeypatch)
+    assert hasattr(mod.preflight, "run_checks")
+    assert hasattr(mod, "doctor")
+
+
+def test_subcommand_words_are_not_read_as_device_names(monkeypatch):
+    """`wtul-rip doctor` must not resolve DEV to /dev/doctor - the
+    preflight would then report a missing drive that is actually there."""
+    for argv in (["wtul-rip", "doctor"], ["wtul-rip", "doctor", "--no-net"],
+                 ["wtul-rip", "speed"]):
+        mod = _load_wtul_rip(monkeypatch, argv=argv)
+        assert mod.DEV == "/dev/sr0", argv
+
+
+def test_device_argument_still_wins_alongside_a_subcommand(monkeypatch):
+    mod = _load_wtul_rip(monkeypatch, argv=["wtul-rip", "sr1", "doctor"])
+    assert mod.DEV == "/dev/sr1"
+    assert mod.DEVNAME == "sr1"
+
+
+def test_doctor_exit_code_is_nonzero_only_on_a_failure(monkeypatch, capsys):
+    mod = _load_wtul_rip(monkeypatch, argv=["wtul-rip", "doctor"])
+
+    monkeypatch.setattr(mod.preflight, "run_checks",
+                        lambda ctx, checks=None: [
+                            mod.preflight.Check("x", mod.preflight.WARN, "d")])
+    assert mod.doctor(check_net=False) == 0
+
+    monkeypatch.setattr(mod.preflight, "run_checks",
+                        lambda ctx, checks=None: [
+                            mod.preflight.Check("x", mod.preflight.FAIL, "d")])
+    assert mod.doctor(check_net=False) == 1
+
+
+def test_lock_is_stale_distinguishes_a_held_lock_from_an_abandoned_file(
+        monkeypatch, tmp_path):
+    mod = _load_wtul_rip(monkeypatch)
+    path = str(tmp_path / "rip.lock")
+    open(path, "w").close()
+    assert mod._lock_is_stale(path) is True
+    held = mod.Lock(path)
+    assert held.acquire()
+    try:
+        assert mod._lock_is_stale(path) is False
+    finally:
+        held.release()
