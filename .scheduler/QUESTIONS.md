@@ -559,3 +559,44 @@ hand.
   2026-07-24. Full record, including a correction to the belief that an
   unattended run could not do it, is appended under `## wtul` there
   (scheduler `33ca45f`).
+- **2026-07-27 (wtul-batch, run 25): built, branch `catalog-outbox`
+  (`51d9632`) — a completed rip can no longer silently lose its catalog
+  row.** When the write-back failed, `wtul-rip` printed one line ("add it
+  to the sheet by hand if it matters") and forgot the row; on show night
+  that line scrolls off behind the next disc's tracklist. Putting the disc
+  back in doesn't help either — every track is already ripped, so the rip
+  returns before it ever reaches the write-back. Failed rows now queue to
+  `~/Music/mixes/.catalog-outbox.json`, and are retried at the next
+  `wtul-rip` startup, by a new `catalog` command (or `wtul-rip catalog`,
+  which needs no drive — runnable from a laptop the morning after), and
+  listed by `doctor` until they land. **Still needs your hands-on
+  verification**: the retry path has only ever run against a host that
+  doesn't resolve. A real rip whose catalog write actually fails, then
+  succeeds on retry into the real sheet, is the witness. 37 new tests
+  (359 total), mutation-checked; no disc was ripped and nothing was
+  written to the real sheet this run.
+- **2026-07-27 (wtul-batch, run 25): a real tradeoff in the retry, worth
+  your call — the flush drops a queued row if that ARTIST+ALBUM already
+  appears in the sheet's last 50 rows.** This is deliberate: `write_row`
+  returns False both when the POST failed *and* when it landed but the
+  confirming GET failed, so re-POSTing a queued row blind is how one
+  network blip becomes a duplicate you delete by hand. The cost is the
+  mirror case: if you genuinely re-catalogue the same album (a re-rip, a
+  second copy for rotation) while the first row is still within the last
+  50, the retry reports it as "already in the sheet" and drops it instead
+  of writing a second row. I picked that way round because a missing row
+  announces itself and a duplicate doesn't, and because you have no delete
+  endpoint. Say so if you'd rather it always write and you'll delete
+  duplicates by hand.
+- **2026-07-27 (wtul-batch, run 25): FYI, a pattern worth a standing
+  rule.** This run's own feature was caught POSTing a rehearsal's
+  simulated album at the live catalog URL — `catalog_retry()` gated its
+  suppression on `SIM`, which is built by `init_simulation()`, and the new
+  `catalog` subcommand exits before the watch loop and so never calls it
+  (fixed to gate on `SIMULATING`, `51d9632`). That is the **fifth**
+  instance of one class (2026-07-25's catalog leak and label print, run
+  20's photo pairing, run 19's harness print). Proposed rule, adopt or
+  drop: *any new entry point that can touch the sheet, the printer or the
+  phone endpoint gets checked against the rehearsal guard — and the check
+  is running it, not reading it.* All five were found by running, none by
+  review.

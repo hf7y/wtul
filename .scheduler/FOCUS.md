@@ -27,13 +27,16 @@ have drifted behind `main` (see "Branch health" below), not open
 questions. QUESTIONS.md's 2026-07-18 either/or parts (b)/(c)/(d) were
 reclassified `(parked)` the same day for this reason.
 
-## Branch health (2026-07-26, run 23)
+## Branch health (2026-07-27, run 25)
 
-One branch, `preflight-doctor` (`4aae15f`), 0 behind `main`: adds
-`wtul-rip doctor`, a no-disc preflight. See QUESTIONS.md's run-23
-entries. Everything below this line is the older 2026-07-24 note, kept
-for its migration warnings; all four branches it names are long since
-merged and pruned.
+One branch, `catalog-outbox` (`51d9632`), 0 behind `main`: the catalog
+retry queue, see the run-25 update below and QUESTIONS.md's run-25
+entries. `preflight-doctor` (merged `112673c`) and `catalog-dj-name`
+(merged `9885422`) are both fully in `main` and their refs are pruned
+local + origin per the standing rule — restore either with
+`git branch <name> <4aae15f|e8df9c9>` if ever needed. Everything below
+this line is older, kept for its migration warnings; every branch those
+notes name is long since merged and pruned.
 
 **Live-machine finding, run 23:** the doctor's first run caught that the
 installed `~/.abcde.conf` had never received the 2026-07-24
@@ -289,6 +292,41 @@ entries for what each part became). (b) was the only one that turned into
 code: every row #8 has written since 2026-07-20 went into the rotation
 catalog unattributed. See #8 below. Milestone criteria unchanged — both
 are still gated on a real rip, and no rip has happened.
+
+**Update (2026-07-27, run 25): a completed rip can no longer lose its
+catalog row — branch `catalog-outbox` (`51d9632`), not merged.** The
+auto-merger took `catalog-dj-name` to `main` between run 24's report and
+this run; the merged result re-verified GREEN from scratch (322/322 plus
+a witnessed full demo rehearsal — sandboxed rip, live `(read speed 4.2x)`
+print, catalog + label SUPPRESSED). This run then closed the gap under
+it: `write_row` returning False printed one line ("add it to the sheet by
+hand if it matters") and forgot the row, and **reinserting the disc does
+not retry it** — every track is already ripped, so `rip_session()` returns
+before it ever reaches the write-back (now pinned by a test). Failed rows
+queue to `~/Music/mixes/.catalog-outbox.json` instead and are retried at
+startup, by a new `catalog` command / `wtul-rip catalog`, and surfaced by
+`doctor`. See #8. Milestone criteria unchanged — both still gated on a
+real rip, and no rip has happened.
+
+**Also run 25, and the more instructive half:** the branch's own feature,
+run for real rather than only tested, was caught POSTing a rehearsal's
+simulated album at the live catalog URL. `catalog_retry()` gated its
+suppression on `SIM`, which `init_simulation()` builds — and the
+`catalog` subcommand exits before the watch loop, so it never calls it.
+Fixed to gate on `SIMULATING` (set at import, true on every entry point),
+`51d9632`. **Fifth instance of the same class** as the 2026-07-25 catalog
+leak and label print: a new code path reaching a real-world side effect
+that the rehearsal guard didn't know about yet. Worth stating as a rule
+for whatever gets built next — *any new entry point that can touch the
+sheet, the printer, or the phone endpoint has to be checked against the
+rehearsal guard, and the check is running it, not reading it.*
+
+**Re-verified live this run, independently of run 24's claims** (both
+read-only, no disc, nothing written): the Spinitron public scrape returns
+27 real spins with populated artist/song from the station's page, and the
+deployed catalog endpoint's `?scope=schema` still reads
+`[#, ARTIST, ALBUM, LABEL, YEAR, Rating, GENRE, MERIT, LOCAL, COMMENT,
+DATE, DJ NAME, HOME]` — so #8's `"DJ NAME"` key still matches the sheet.
 
 *(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
 it doesn't fit wtul's own read of its bar.)*
@@ -651,6 +689,27 @@ Needs before starting:
   shown as-is, not parsed into structured fields).
 
 ### 8. Auto-update the local music catalog spreadsheet
+
+**Update (2026-07-27, run 25): a failed row is queued, not lost — branch
+`catalog-outbox` (`51d9632`), not merged.** `write_row()` already knew
+the difference between "the POST landed" and "the POST's response lied"
+(it re-GETs to confirm). What it could not do was survive a `False`.
+`lib/catalog_outbox.py` keeps the row in a JSON file at `MIXES_ROOT`
+(deliberately *not* the dated `RIPDIR` — a row that failed on Friday has
+to still be visible Saturday), retried at the next `wtul-rip` startup,
+on demand via `catalog` / `wtul-rip catalog`, and reported by `doctor`
+until it lands. The design turns on one asymmetry, the same one that
+made GENRE/YEAR a question rather than a guess: **a duplicate row in the
+live catalog comes out by hand (no delete endpoint), a dropped row only
+needs re-queueing.** So `queue()` de-duplicates on ARTIST+ALBUM+DATE
+(DJ NAME deliberately outside the key), and `flush()` re-confirms
+*before* it re-POSTs, reading 50 rows back rather than `confirm_row`'s
+default 3 — because `write_row` also returns False when the POST landed
+and only its confirming GET failed, which is how one network blip would
+otherwise become a hand-deleted duplicate. 37 new tests, mutation-checked.
+**Never exercised against the real sheet**: the retry path has only run
+against an unresolvable host, so a real rip whose write-back fails is
+still the witness.
 
 **Update (2026-07-27, run 24): rows are attributed now — branch
 `catalog-dj-name` (`b28240b`), not merged.** Zach's answer to the
