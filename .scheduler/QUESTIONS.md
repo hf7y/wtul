@@ -601,3 +601,33 @@ hand.
   phone endpoint gets checked against the rehearsal guard — and the check
   is running it, not reading it.* All five were found by running, none by
   review.
+- **2026-07-27 (wtul-batch, run 26): built, branch `rehearsal-guard-audit`
+  — the rehearsal rule I proposed last run is a guard now, not a rule.**
+  Run 25 ended by asking you to adopt a standing rule ("any new entry
+  point that can touch the sheet, the printer or the phone endpoint gets
+  checked against the rehearsal guard"). Rather than ask you to remember
+  it, this run made it a test: `rehearsing()` is the single question every
+  real-world side effect asks, and
+  `tests/test_rehearsal_guard_audit.py` enumerates wtul-rip's entry points
+  **out of the source** and runs each one under rehearsal with the catalog
+  POST, the label print and the phone endpoint replaced by tripwires. Add a
+  command later and it joins the audit on its own; add one without
+  deciding its guard and the suite fails. **No hands-on hardware
+  verification needed for this one** — it touches no drive and clears no
+  hardware gate. 19 new tests (378 total), 9 mutations all caught. You can
+  consider the run-25 rule question closed unless you'd rather it were
+  also written down as prose somewhere.
+- **2026-07-27 (wtul-batch, run 26): FYI, three real defects fell out of
+  building that audit, all fixed on the same branch.** (1) `wtul-rip
+  catalog` was running with `DEV=/dev/catalog` — "catalog" got added to the
+  `__main__` dispatch last run and never to `SUBCOMMANDS`, so the
+  subcommand's own name was parsed as a device name, giving it a bogus
+  lockfile. (2) `check_pending_photos()` polled the real photo endpoint
+  with no rehearsal guard at all; unreachable today only because pairing is
+  suppressed two functions away, which is exactly how the previous five
+  leaks stayed invisible. (3) The audit's tripwires were being swallowed by
+  `catalog_retry()`'s deliberate `except Exception` — the first version of
+  the audit literally could not fail. Worth knowing about (3) in general:
+  the same broad-except discipline that keeps a network blip from stopping
+  a rip will hide any test you write inside that call path unless it raises
+  a `BaseException`.

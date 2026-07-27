@@ -27,16 +27,18 @@ have drifted behind `main` (see "Branch health" below), not open
 questions. QUESTIONS.md's 2026-07-18 either/or parts (b)/(c)/(d) were
 reclassified `(parked)` the same day for this reason.
 
-## Branch health (2026-07-27, run 25)
+## Branch health (2026-07-27, run 26)
 
-One branch, `catalog-outbox` (tip = whatever `origin/catalog-outbox`
-points at; it is rebased to 0 behind `main` on every run, so a written-down
-SHA rots — the run's own report under `~/reports/wtul/` records it): the catalog
-retry queue, see the run-25 update below and QUESTIONS.md's run-25
-entries. `preflight-doctor` (merged `112673c`) and `catalog-dj-name`
-(merged `9885422`) are both fully in `main` and their refs are pruned
-local + origin per the standing rule — restore either with
-`git branch <name> <4aae15f|e8df9c9>` if ever needed. Everything below
+One branch, `rehearsal-guard-audit` (tip = whatever
+`origin/rehearsal-guard-audit` points at; a written-down SHA rots, the
+run's own report under `~/reports/wtul/` records it): turns the
+rehearsal-guard rule into a mechanism, see the run-26 update below and
+QUESTIONS.md's run-26 entries. `catalog-outbox` was merged to `main` by
+the auto-merger between run 25 and this run (`7e88b08`), re-verified
+green from scratch here, ref pruned per the standing rule — restore with
+`git branch catalog-outbox 651d14f` if ever needed. `preflight-doctor`
+(merged `112673c`) and `catalog-dj-name` (merged `9885422`) likewise —
+`git branch <name> <4aae15f|e8df9c9>`. Everything below
 this line is older, kept for its migration warnings; every branch those
 notes name is long since merged and pruned.
 
@@ -323,6 +325,55 @@ that the rehearsal guard didn't know about yet. Worth stating as a rule
 for whatever gets built next — *any new entry point that can touch the
 sheet, the printer, or the phone endpoint has to be checked against the
 rehearsal guard, and the check is running it, not reading it.*
+
+**Update (2026-07-27, run 26): the rehearsal rule run 25 proposed is now
+a mechanism — branch `rehearsal-guard-audit`, not merged.** The
+auto-merger took `catalog-outbox` to `main` (`7e88b08`) between runs; the
+merged result re-verified GREEN from scratch (359/359). Run 25 ended by
+proposing a standing rule — *any new entry point that can touch the
+sheet, the printer or the phone endpoint gets checked against the
+rehearsal guard, and the check is running it, not reading it.* Prose
+decays and guards don't, so this run built the guard instead of adopting
+the rule.
+
+`rehearsing()` is now the single question every real-world side effect
+asks. The five suppression sites were gated on three different
+expressions; `SIM is not None` is the wrong one on every entry point but
+the watch loop, because `SIM` is built by `init_simulation()` and
+`catalog`/`speed`/`doctor` all exit before it — precisely run 25's leak.
+`tests/test_rehearsal_guard_audit.py` then enumerates entry points **from
+the source** (watch-loop commands parsed out of `main()`'s dispatch
+chain, argv subcommands from `SUBCOMMANDS`) and runs each under rehearsal
+with the catalog POST, the label print and the phone endpoint replaced by
+tripwires. A command added next month joins the audit whether or not
+anyone remembers the file exists; adding one without deciding its guard
+fails the suite.
+
+Three real defects found while building it:
+1. **`wtul-rip catalog` ran against `/dev/catalog`.** `"catalog"` was
+   added to the `__main__` dispatch on 2026-07-27 and never to
+   `SUBCOMMANDS`, so `_parse_device()` read the subcommand's own name as a
+   device name and gave it a bogus lockfile. Both halves now come from one
+   list, and a name with no handler fails loud instead of falling through
+   to the watch loop.
+2. **`check_pending_photos()` polled the real GAS endpoint unguarded.**
+   Unreachable today only because pairing is suppressed two functions
+   away, so a rehearsal's sandboxed pending file stays empty — i.e. the
+   missing guard was invisible while depending on something else staying
+   correct. That is the shape of all five prior leaks; guarded directly.
+3. **The audit's own tripwires were being swallowed.** `catalog_retry()`
+   rightly catches `Exception` so a network problem can't stop a rip —
+   which also ate the tripwire, and the first version of the audit
+   *could not fail*. `SideEffectEscaped` is a `BaseException` now.
+
+Mutation-checked (9 mutations, all caught). The first mutation run found
+the audit's own blind spot and is worth carrying forward: deleting the
+label-print guard left everything green, because a table enumerated from
+`main()`'s command dispatch does not include *"insert a disc"* — the
+commands are the paths that grow, the rip is the path that matters. An
+end-to-end rehearsed rip is now part of the audit. 378 tests, up from 359.
+**No hardware involved and no hardware gate cleared** — milestone criteria
+unchanged, both still gated on a real rip.
 
 **Re-verified live this run, independently of run 24's claims** (both
 read-only, no disc, nothing written): the Spinitron public scrape returns
