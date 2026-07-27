@@ -504,6 +504,190 @@ def test_catalog_row_date_is_the_date_entered(monkeypatch, tmp_path):
     assert row["DATE"] == time.strftime("%Y-%m-%d")
 
 
+# -- the retry outbox, through the real rip_session() seam ---------------
+#
+# The failure this covers is not a crash: before the outbox, a completed
+# rip whose catalog write didn't land printed one line and forgot the row.
+# On show night that line scrolls off behind the next disc's tracklist.
+
+
+def _rehearse_failed_catalog_write(monkeypatch, tmp_path, dj_name=None):
+    """One complete rehearsed disc whose catalog write-back fails, with the
+    suppression opted out of and `write_row` injected to return False -
+    the same shape as a real unconfirmed POST."""
+    if dj_name is None:
+        monkeypatch.delenv("WTUL_DJ_NAME", raising=False)
+    else:
+        monkeypatch.setenv("WTUL_DJ_NAME", dj_name)
+    monkeypatch.setenv("WTUL_SIMULATE_ALLOW_CATALOG", "1")
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    mod.CATALOG_WRITEBACK_URL = "https://example.invalid/exec"
+    monkeypatch.setattr(mod.catalog_writeback, "write_row",
+                        lambda url, row: False)
+    assert mod.rip_session(mod.DEV) is True
+    return mod
+
+
+def test_outbox_lives_in_the_sandbox_under_a_rehearsal(monkeypatch, tmp_path):
+    """Same containment rule as RIPDIR/LOGDIR: a rehearsal's failed row must
+    not queue itself into the real outbox, where the next real session would
+    flush a simulated album into the station's live catalog."""
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    assert str(tmp_path / "sandbox") in mod.CATALOG_OUTBOX_FILE
+    assert os.path.join("Music", "mixes") not in mod.CATALOG_OUTBOX_FILE
+
+
+def test_outbox_is_not_inside_the_dated_mix_folder(monkeypatch, tmp_path):
+    """It sits beside the dated folders, not in one: a row that failed on
+    Friday has to still be visible to Saturday's session."""
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    assert not mod.CATALOG_OUTBOX_FILE.startswith(mod.RIPDIR + os.sep)
+
+
+def test_a_failed_catalog_write_queues_the_row(monkeypatch, tmp_path, capsys):
+    mod = _rehearse_failed_catalog_write(monkeypatch, tmp_path)
+    items = mod.catalog_outbox.load(mod.CATALOG_OUTBOX_FILE)
+    assert len(items) == 1
+    assert items[0]["row"]["ARTIST"] == "Belong"
+    assert items[0]["row"]["ALBUM"] == "October Language"
+    assert items[0]["row"]["DJ NAME"] == "Guy"
+    out = capsys.readouterr().out
+    assert "queued for retry" in out
+    assert "Nothing was lost" in out
+
+
+def test_a_confirmed_catalog_write_queues_nothing(monkeypatch, tmp_path):
+    """The outbox must stay empty on the happy path - otherwise every rip
+    accumulates a row that a later flush re-POSTs as a duplicate."""
+    monkeypatch.setenv("WTUL_SIMULATE_ALLOW_CATALOG", "1")
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    mod.CATALOG_WRITEBACK_URL = "https://example.invalid/exec"
+    monkeypatch.setattr(mod.catalog_writeback, "write_row",
+                        lambda url, row: True)
+    assert mod.rip_session(mod.DEV) is True
+    assert mod.catalog_outbox.load(mod.CATALOG_OUTBOX_FILE) == []
+
+
+def test_reinserting_the_disc_does_not_retry_the_catalog_write(monkeypatch, tmp_path):
+    """Why the queue is the only way back. The obvious human recovery from
+    a failed catalog write - put the disc back in - does nothing: every
+    track is already ripped, so rip_session() returns before it ever
+    reaches the write-back. Without the outbox the row is simply gone."""
+    mod = _rehearse_failed_catalog_write(monkeypatch, tmp_path)
+    attempts = []
+    monkeypatch.setattr(mod.catalog_writeback, "write_row",
+                        lambda url, row: attempts.append(row) or False)
+    assert mod.rip_session(mod.DEV) is True
+    assert attempts == []
+    # ...and the one queued row is still there, unchanged, waiting.
+    items = mod.catalog_outbox.load(mod.CATALOG_OUTBOX_FILE)
+    assert len(items) == 1
+    assert items[0]["attempts"] == 1
+
+
+def test_catalog_retry_is_suppressed_under_a_rehearsal(monkeypatch, tmp_path, capsys):
+    """Fourth member of the containment class (catalog row, label, photo
+    pairing): flushing a queue is a POST to the real sheet too."""
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    mod.CATALOG_WRITEBACK_URL = "https://example.invalid/exec"
+    mod.catalog_outbox.queue(mod.CATALOG_OUTBOX_FILE,
+                             {"ARTIST": "Belong", "ALBUM": "October Language",
+                              "DATE": "2026-07-27"})
+    monkeypatch.setattr(mod.catalog_writeback, "write_row",
+                        lambda url, row: pytest.fail("rehearsal flushed to the real sheet"))
+    monkeypatch.setattr(mod.catalog_writeback, "confirm_row",
+                        lambda *a, **k: pytest.fail("rehearsal flushed to the real sheet"))
+    mod.catalog_retry()
+    assert "SUPPRESSED (rehearsal)" in capsys.readouterr().out
+    assert len(mod.catalog_outbox.load(mod.CATALOG_OUTBOX_FILE)) == 1
+
+
+def test_catalog_retry_is_suppressed_before_init_simulation(monkeypatch, tmp_path, capsys):
+    """`wtul-rip catalog` exits before the watch loop and so never calls
+    init_simulation() - SIM is still None there even under
+    WTUL_SIMULATE_DRIVE. Gating the flush on SIM would leave that entry
+    point free to POST a sandboxed rehearsal's simulated albums into the
+    station's live catalog; witnessed doing exactly that before the guard
+    moved to SIMULATING."""
+    monkeypatch.setattr("sys.argv", ["wtul-rip"])
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("WTUL_SIMULATE_DRIVE", _write_spec(tmp_path))
+    monkeypatch.setenv("WTUL_SIMULATE_ROOT", str(tmp_path / "sandbox"))
+    monkeypatch.delenv("WTUL_SIMULATE_ALLOW_CATALOG", raising=False)
+    loader = SourceFileLoader("wtul_rip_precatalog", _MODPATH)
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+
+    assert mod.SIM is None and mod.SIMULATING is True
+    mod.CATALOG_WRITEBACK_URL = "https://example.invalid/exec"
+    mod.catalog_outbox.queue(mod.CATALOG_OUTBOX_FILE,
+                             {"ARTIST": "Belong", "ALBUM": "October Language",
+                              "DATE": "2026-07-27"})
+    monkeypatch.setattr(mod.catalog_writeback, "write_row",
+                        lambda url, row: pytest.fail("flushed a rehearsal outbox to the real sheet"))
+    monkeypatch.setattr(mod.catalog_writeback, "confirm_row",
+                        lambda *a, **k: pytest.fail("flushed a rehearsal outbox to the real sheet"))
+    mod.catalog_retry()
+    assert "SUPPRESSED (rehearsal)" in capsys.readouterr().out
+    assert len(mod.catalog_outbox.load(mod.CATALOG_OUTBOX_FILE)) == 1
+
+
+def test_catalog_retry_flushes_a_queued_row(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("WTUL_SIMULATE_ALLOW_CATALOG", "1")
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    mod.CATALOG_WRITEBACK_URL = "https://example.invalid/exec"
+    mod.catalog_outbox.queue(mod.CATALOG_OUTBOX_FILE,
+                             {"ARTIST": "Belong", "ALBUM": "October Language",
+                              "DATE": "2026-07-27"})
+    monkeypatch.setattr(mod.catalog_writeback, "confirm_row",
+                        lambda *a, **k: False)
+    monkeypatch.setattr(mod.catalog_writeback, "write_row",
+                        lambda url, row: True)
+    mod.catalog_retry()
+    out = capsys.readouterr().out
+    assert "Belong - October Language" in out
+    assert "1 written" in out
+    assert mod.catalog_outbox.load(mod.CATALOG_OUTBOX_FILE) == []
+
+
+def test_catalog_retry_says_nothing_when_the_queue_is_empty_at_startup(
+        monkeypatch, tmp_path, capsys):
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    capsys.readouterr()  # drop the rehearsal banner printed at module load
+    mod.catalog_retry(quiet_when_empty=True)
+    assert capsys.readouterr().out == ""
+    mod.catalog_retry()
+    assert "empty" in capsys.readouterr().out
+
+
+def test_catalog_retry_without_a_url_keeps_the_rows(monkeypatch, tmp_path, capsys):
+    """Nowhere to retry against is not a reason to drop the record."""
+    monkeypatch.setenv("WTUL_SIMULATE_ALLOW_CATALOG", "1")
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    mod.CATALOG_WRITEBACK_URL = ""
+    mod.catalog_outbox.queue(mod.CATALOG_OUTBOX_FILE,
+                             {"ARTIST": "Belong", "ALBUM": "October Language",
+                              "DATE": "2026-07-27"})
+    mod.catalog_retry()
+    assert "CATALOG_WRITEBACK_URL is not set" in capsys.readouterr().out
+    assert len(mod.catalog_outbox.load(mod.CATALOG_OUTBOX_FILE)) == 1
+
+
+def test_doctor_surfaces_the_queued_rows(monkeypatch, tmp_path, capsys):
+    """The preflight is the one moment someone is already reading this
+    tool's output before a show."""
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    mod.catalog_outbox.queue(mod.CATALOG_OUTBOX_FILE,
+                             {"ARTIST": "Belong", "ALBUM": "October Language",
+                              "DATE": "2026-07-27"})
+    mod.doctor(check_net=False)
+    out = capsys.readouterr().out
+    assert "catalog outbox" in out
+    assert "Belong - October Language" in out
+    assert "wtul-rip catalog" in out
+
+
 # -- `fix <discid>` on a rehearsed unidentified disc ---------------------
 #
 # This is the other stability-milestone criterion's logic (#2's metadata-fix

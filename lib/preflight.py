@@ -94,7 +94,7 @@ class Context:
                  which=None, run=None, fetch=None, free_kb=None,
                  exists=None, isdir=None, isfile=None, access=None,
                  glob_=None, mtime=None, now=None, import_ok=None,
-                 lock_is_stale=None):
+                 lock_is_stale=None, outbox_pending=None):
         self.dev = dev
         self.home = home
         self.mixes_root = mixes_root
@@ -125,6 +125,11 @@ class Context:
         # "can't tell" and the check degrades to a WARN rather than
         # claiming a stale lock it didn't verify.
         self.lock_is_stale = lock_is_stale
+        # Injected by wtul-rip: a zero-arg callable returning the queued
+        # catalog rows (lib/catalog_outbox.py). None means the caller
+        # didn't wire it, and the check reports that rather than claiming
+        # an empty queue it never looked at.
+        self.outbox_pending = outbox_pending
 
 
 def _default_import_ok(module):
@@ -354,6 +359,28 @@ def check_network(ctx):
     return out
 
 
+def check_catalog_outbox(ctx):
+    """Rips that finished but never made it into the rotation catalog.
+    A preflight is the one moment someone is already looking at this
+    tool's output before a show, so it's where a queue nobody typed
+    'catalog' to drain should surface."""
+    if ctx.outbox_pending is None:
+        return [Check("catalog outbox", WARN,
+                      "not wired - can't tell whether any rip is unlogged")]
+    pending = ctx.outbox_pending()
+    if not pending:
+        return [Check("catalog outbox", OK,
+                      "empty - every completed rip reached the sheet")]
+    labels = ", ".join(
+        f"{(e.get('row') or {}).get('ARTIST', '?')} - "
+        f"{(e.get('row') or {}).get('ALBUM', '?')}" for e in pending[:3])
+    more = f" (+{len(pending) - 3} more)" if len(pending) > 3 else ""
+    return [Check("catalog outbox", WARN,
+                  f"{len(pending)} rip(s) never reached the catalog: "
+                  f"{labels}{more}",
+                  fix="run `wtul-rip catalog` to retry them")]
+
+
 CHECKS = [
     check_binaries,
     check_mutagen,
@@ -364,6 +391,7 @@ CHECKS = [
     check_disk,
     check_lock,
     check_stale_tempdirs,
+    check_catalog_outbox,
     check_credentials,
     check_network,
 ]

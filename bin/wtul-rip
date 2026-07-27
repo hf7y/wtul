@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath
 import spinitron
 import metadata_lookup
 import catalog_writeback
+import catalog_outbox
 import label_render
 import fake_drive
 import photo_capture
@@ -117,6 +118,13 @@ SIMULATE_ALLOW_CATALOG = bool(
     os.environ.get("WTUL_SIMULATE_ALLOW_CATALOG", "").strip())
 PHOTO_CAPTURE_URL = os.environ.get("PHOTO_CAPTURE_URL", "").strip()
 PENDING_PHOTOS_FILE = os.path.join(RIPDIR, ".photo-pending.json")
+# Catalog rows that never reached the sheet, kept until they do (#8, see
+# lib/catalog_outbox.py). Deliberately at MIXES_ROOT and not inside RIPDIR
+# like the photo-pending file above: RIPDIR is today's dated mix folder, so
+# a row that failed on Friday would be invisible to Saturday's session -
+# which is the same silent loss the outbox exists to prevent. Sandboxed for
+# free under a rehearsal, since MIXES_ROOT is what gets redirected.
+CATALOG_OUTBOX_FILE = os.path.join(MIXES_ROOT, ".catalog-outbox.json")
 
 PER_TRACK_TIMEOUT = 900       # 15 min/track cap - a bad drive can't hang forever
 MAX_LOG_BYTES = 5_000_000     # matches the old wrapper's runaway-log cap
@@ -1096,8 +1104,22 @@ def rip_session(dev):
             if confirmed:
                 print("Catalog: logged to sheet.")
             else:
-                print("Catalog: write-back failed or unreachable, not logged - "
-                      "add it to the sheet by hand if it matters.")
+                # Don't just say so and move on: on show night this line
+                # scrolls off behind the next disc's tracklist and the row
+                # is gone for good. Queue it instead - retried at the next
+                # startup, by the 'catalog' command, and surfaced by
+                # `doctor` until it lands.
+                status = catalog_outbox.queue(CATALOG_OUTBOX_FILE, row)
+                if status == "error":
+                    print("Catalog: write-back failed AND the retry queue could "
+                          "not be written - add it to the sheet by hand: "
+                          f"{row['ARTIST']} - {row['ALBUM']}.")
+                else:
+                    waiting = len(catalog_outbox.load(CATALOG_OUTBOX_FILE))
+                    print("Catalog: write-back failed or unreachable - row "
+                          f"queued for retry ({waiting} waiting). Type "
+                          "'catalog' to retry now; wtul-rip also retries at "
+                          "startup. Nothing was lost.")
         tracklist = [titles.get(n, f"Track {n}") for n in track_nums]
         # Rendering stays: it's pure PIL, so a rehearsal exercises the label
         # layout for free. Only the print itself is gated - catprint talks to
@@ -1203,6 +1225,66 @@ def check_pending_photos():
     _save_pending_photos(still_pending)
     if still_pending:
         print(f"{len(still_pending)}/{len(pending)} pairing(s) still waiting on a phone upload.")
+
+
+def catalog_retry(quiet_when_empty=False):
+    """Retry every catalog row that never reached the sheet (see
+    lib/catalog_outbox.py). Runs on demand ('catalog' / `wtul-rip
+    catalog`) and once at startup, where `quiet_when_empty` keeps the
+    normal case - nothing waiting - from printing anything at all.
+
+    Never raises: this runs inline in the same loop that watches the
+    drive, and a network problem must not be able to stop a rip.
+    """
+    items = catalog_outbox.load(CATALOG_OUTBOX_FILE)
+    if not items:
+        if not quiet_when_empty:
+            print("Catalog outbox: empty - every completed disc has been logged.")
+        return
+    print(f"\nCatalog outbox: {len(items)} row(s) never reached the sheet:")
+    for line in catalog_outbox.describe(items):
+        print(f"   {line}")
+    # Same containment rule as the write-back itself: a rehearsal must not
+    # be able to POST into the station's live rotation catalog, and that
+    # includes flushing a queue - a rehearsal's outbox holds simulated
+    # albums, so flushing it is precisely the leak.
+    #
+    # Gated on SIMULATING, not `SIM is not None`, and that difference is
+    # load-bearing: SIM is built by init_simulation(), which `wtul-rip
+    # catalog` never calls (it exits before the watch loop, like `speed`
+    # and `doctor`). Witnessed doing exactly the wrong thing during this
+    # branch's own live check - `WTUL_SIMULATE_DRIVE=demo wtul-rip catalog`
+    # read the sandboxed outbox and then flushed it against the real URL.
+    # SIMULATING is set at import from the env var, so it is true on every
+    # entry point.
+    if SIMULATING and not SIMULATE_ALLOW_CATALOG:
+        print("   Retry SUPPRESSED (rehearsal) - rerun without "
+              "WTUL_SIMULATE_DRIVE to flush these.")
+        return
+    if not CATALOG_WRITEBACK_URL:
+        print("   CATALOG_WRITEBACK_URL is not set, so there is nowhere to "
+              "retry against - they stay queued.")
+        return
+    print("   Retrying...")
+    result = catalog_outbox.flush(
+        CATALOG_OUTBOX_FILE, CATALOG_WRITEBACK_URL,
+        write_row=catalog_writeback.write_row,
+        confirm_row=catalog_writeback.confirm_row)
+    parts = []
+    if result["sent"]:
+        parts.append(f"{result['sent']} written")
+    if result["already"]:
+        # Not a no-op worth hiding: it means an earlier write did land and
+        # only its confirming GET failed, which is the exact case that
+        # would have become a hand-deleted duplicate row without the
+        # re-confirm in flush().
+        parts.append(f"{result['already']} already in the sheet")
+    if result["failed"]:
+        parts.append(f"{result['failed']} still failing")
+    print("   " + (", ".join(parts) if parts else "nothing to do") + ".")
+    if result["remaining"]:
+        print(f"   {result['remaining']} row(s) still queued - they will be "
+              "retried again next startup.")
 
 
 def parse_rip_speeds(text):
@@ -1368,6 +1450,7 @@ def doctor_context(check_net=True):
         check_net=check_net,
         stale_tempdir_secs=STALE_TEMPDIR_SECS,
         lock_is_stale=_lock_is_stale,
+        outbox_pending=lambda: catalog_outbox.load(CATALOG_OUTBOX_FILE),
     )
 
 
@@ -1487,7 +1570,13 @@ def main():
     print(f"wtul-rip watching {DEV}. Press 'h' for history, 's' for status, "
           f"'e' to eject, 'spins' to check Spinitron now, 'speed' for "
           f"rip-speed stats, 'photos' to check for pending phone photo "
-          f"uploads, 'fix <discid>' to relabel a past disc, 'q' to quit.\n")
+          f"uploads, 'catalog' to retry unlogged rips, "
+          f"'fix <discid>' to relabel a past disc, 'q' to quit.\n")
+    # A row that failed to reach the sheet on a bad-network night is most
+    # likely to succeed now, at the start of the next session - and nobody
+    # remembers to type 'catalog'. Silent when the queue is empty, which is
+    # the normal case.
+    catalog_retry(quiet_when_empty=True)
     last_seen_empty = True
     seen_spin_keys = None
     last_spin_check = 0.0
@@ -1534,6 +1623,8 @@ def main():
                 check_pending_photos()
             elif low == "speed":
                 speed_report()
+            elif low == "catalog":
+                catalog_retry()
             elif low.startswith("fix "):
                 fix_by_discid(cmd.split(None, 1)[1].strip())
             continue
@@ -1592,7 +1683,8 @@ def main():
         finally:
             lock.release()
         print(f"\nwatching {DEV}. Press 'h' for history, 's' for status, "
-              f"'speed' for rip-speed stats, 'q' to quit.\n")
+              f"'speed' for rip-speed stats, 'catalog' to retry unlogged "
+              f"rips, 'q' to quit.\n")
 
 
 if __name__ == "__main__":
@@ -1601,6 +1693,12 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     if "speed" in args:
         speed_report()
+        sys.exit(0)
+    # `wtul-rip catalog` retries any rip whose catalog row never landed and
+    # exits - no drive, no disc, no watch loop, so it can be run from a
+    # laptop the morning after a show once the network is back.
+    if "catalog" in args:
+        catalog_retry()
         sys.exit(0)
     # `wtul-rip doctor` answers "is this rig ready?" with no disc and no
     # watch loop, and exits nonzero if it isn't - so it can gate a script.
