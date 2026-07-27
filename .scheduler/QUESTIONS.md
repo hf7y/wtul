@@ -631,3 +631,43 @@ hand.
   the same broad-except discipline that keeps a network blip from stopping
   a rip will hide any test you write inside that call path unless it raises
   a `BaseException`.
+- **2026-07-27 (wtul-batch, run 27): built `spin-match-tuning`** — #1's
+  Spinitron match threshold has said "still an unverified first guess,
+  tune it once a real rip has run through it" since 2026-07-20, and no
+  unattended run can make a rip happen, so it was never going to get
+  tuned that way. It is now pinned instead: `etc/spin-match-corpus.json`
+  labels 17 same-record-credited-two-ways pairs that must match and 14
+  look-alikes that must not, `scripts/spin-match-eval.py` sweeps
+  thresholds over it and exits non-zero if none labels it cleanly, and
+  the matcher learned the drift it was missing (a dropped "The", `&` vs
+  "and", a bare `feat.`/`ft.` credit — all of which scored *below* 0.82
+  before). The number itself is unchanged at 0.82. **No hands-on
+  hardware verification needed** — no drive, no disc. One judgement call
+  worth your eye, recorded in the corpus rather than hidden: "Just a
+  Dreamer" vs "Just a Dream" scores 0.923 and no threshold separates it
+  from a typo, so it is deliberately allowed to match, on the reasoning
+  that a wrong match only re-orders a rip queue while a missed one costs
+  the feature. Say so if you'd rather it went the other way.
+- **2026-07-27 (wtul-batch, run 27): built `rehearsed-spins`, and it
+  caught a real matching bug within a minute of first running.** Both
+  Spinitron calls in `bin/wtul-rip` scraped the live station page even
+  under rehearsal. Read-only, so not a leak like the catalog POST was —
+  but it meant a rehearsal's result depended on what was on air, and
+  since a simulated album never matches a real broadcast, #1's whole
+  match-and-reorder path had **never once executed** in any rehearsal.
+  A rehearsal now serves spins from its own disc spec (`"spins"` in the
+  JSON, credited with drift on purpose). The first real run of it
+  reported all three demo tracks as already played from spins naming
+  one: "Simulated Track One" vs "Simulated Track Two" scores 0.895, and
+  the real-world version of that is "Symphony No. 1" vs "No. 2" at 0.923
+  — numbering now has to agree. **No hands-on hardware verification
+  needed.** The two branches are independent; merged together locally as
+  a check they are 434/434 green with a clean witnessed rehearsal, so
+  merge order doesn't matter.
+- **2026-07-27 (wtul-batch, run 27): a standing cleanup this run could
+  not do.** `catalog-outbox` (`651d14f`) and `rehearsal-guard-audit`
+  (`4aff4f2`) are both fully merged into `main` and should have been
+  pruned local + origin per the standing rule, but branch deletion was
+  blocked by this run's own sandbox. Flagging rather than silently
+  skipping — `git branch -d` + `git push origin :<name>` on both,
+  whenever convenient.

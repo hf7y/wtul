@@ -27,6 +27,27 @@ have drifted behind `main` (see "Branch health" below), not open
 questions. QUESTIONS.md's 2026-07-18 either/or parts (b)/(c)/(d) were
 reclassified `(parked)` the same day for this reason.
 
+## Branch health (2026-07-27, run 27)
+
+Two branches, both from run 27, both off `main` and independent of each
+other (tips = whatever `origin/<name>` points at; a written-down SHA
+rots, the run's own report under `~/reports/wtul/` records it):
+`spin-match-tuning` (#1's 0.82 threshold, and the numbered-title bug the
+rehearsal caught) and `rehearsed-spins` (a rehearsal serves its own
+spins instead of phoning the station). Each is green alone — 421 and 391
+— and, per run 20's tested-apart-broken-together lesson, they were also
+merged together locally and re-run: **434/434, plus a witnessed demo
+rehearsal reporting the one correct matched track.** That local merge
+was a check, not a push; the branches are separate on origin.
+`rehearsal-guard-audit` was merged to `main` by the auto-merger
+(`6bde473`) between run 26 and this run and re-verified green from
+scratch here (378/378). Its ref and `catalog-outbox`'s are still present
+locally and on origin — **pruning them was blocked by this run's
+sandbox, so that standing cleanup is still owed**; both are fully merged
+(`git branch --merged main` confirms), so deleting
+`catalog-outbox` (`651d14f`) and `rehearsal-guard-audit` (`4aff4f2`)
+local+origin is safe whenever someone can.
+
 ## Branch health (2026-07-27, run 26)
 
 One branch, `rehearsal-guard-audit` (tip = whatever
@@ -375,6 +396,60 @@ end-to-end rehearsed rip is now part of the audit. 378 tests, up from 359.
 **No hardware involved and no hardware gate cleared** — milestone criteria
 unchanged, both still gated on a real rip.
 
+**Update (2026-07-27, run 27): #1's threshold stops being folklore, and
+the rehearsal stops phoning the station — branches `spin-match-tuning`
+and `rehearsed-spins`, neither merged.** Both milestone criteria are
+gated on a real rip and no drive is attached (`/dev/sr0` absent), so
+this run took the one FOCUS item that is neither hardware-gated nor
+waiting on a decision: #1's note, carried since 2026-07-20, that "the
+0.82 match threshold is still a first guess — worth tuning once a real
+rip has run through it." No rip was ever going to happen unattended, so
+the number sat unexamined for a week.
+
+Measured rather than guessed. Three kinds of drift that name the same
+record scored *below* the line — "Beatles"/"The Beatles" 0.778,
+"Rolling Stones, The" 0.778, "Kendrick Lamar"/"Kendrick Lamar feat.
+Zacari" 0.700 — which is exactly what a DJ typing into Spinitron
+produces against what CDDB puts on a disc. `_compare_key()` drops a
+trailing unbracketed guest credit and the article/conjunction tokens two
+catalogues spell differently; `_similarity()` takes the max of that and
+the old ratio, so it can only raise a score. `etc/spin-match-corpus.json`
+(17 positives, 14 negatives, 1 recorded accepted false positive) pins
+the threshold, and `scripts/spin-match-eval.py` sweeps it and exits
+non-zero if no single threshold labels the corpus cleanly. Threshold
+unchanged at 0.82 — now with evidence rather than a shrug.
+
+**The instructive half is the second branch, and the bug it caught.**
+`rip_session()` and the watch loop both scraped the real spinitron.com
+unconditionally, including under rehearsal. Read-only, so never a leak
+of the kind the five guarded side effects were — the other failure: a
+rehearsal that depended on what happened to be on air, and, because a
+simulated album never matches a real broadcast, **#1's match-and-reorder
+was the one part of `rip_session()` a "complete" rehearsal never ran at
+all.** Same shape as run 20's speed print. `recent_spins()` now answers
+from the disc spec when `rehearsing()`; specs gain a `spins` field, and
+the demo's spins are deliberately not string-identical to its own
+tracklist so `WTUL_SIMULATE_DRIVE=demo` exercises the matcher instead of
+a string compare.
+
+The first run of that rehearsal immediately reported *three* tracks
+already played from spins naming one. "Simulated Track One" vs
+"Simulated Track Two" scores 0.895; "Symphony No. 1"/"No. 2" 0.923;
+"Untitled 3"/"Untitled" 0.889 — a character ratio under-weights one
+short token differing inside a long shared string, and this station
+plays a lot of numbered classical and experimental music. Numbers now
+have to agree (digits and spelled-out words alike, so "Track Two" and
+"Track 2" still match); a disagreement caps the score at 0.5. **Found by
+running it, not by reading it** — the sixth time this month that has
+been the sentence, and the first where the thing that ran it was built
+the same hour.
+
+13 mutations, all caught. **No hardware involved and no hardware gate
+cleared** — milestone criteria unchanged, both still gated on a real
+rip. And the corpus is hand-built, not observed spins: it says the
+matcher hasn't regressed on drift we know exists, not what the real-world
+hit rate is. A real rip's own spins remain the last word.
+
 **Re-verified live this run, independently of run 24's claims** (both
 read-only, no disc, nothing written): the Spinitron public scrape returns
 27 real spins with populated artist/song from the station's page, and the
@@ -445,8 +520,23 @@ spin's `data-spin` attribute. Wired unconditionally into `rip_session()` in
 network/scrape failure is caught and logged, never aborts the rip. Live-
 verified against the real page 2026-07-20 (see `tests/test_spinitron.py`
 for the parsing tests, `tests/test_wiring.py` for the module-load smoke
-test). The 0.82 match threshold is still a first guess - worth tuning once
-a real rip has run through it a few times. `fetch_recent_spins(api_key,
+test).
+
+**Update (2026-07-27, run 27): the threshold is no longer a first guess,
+branches `spin-match-tuning` + `rehearsed-spins`, neither merged.** It
+stays at 0.82, but it is now pinned by a labelled corpus
+(`etc/spin-match-corpus.json`) with a sweep tool
+(`scripts/spin-match-eval.py`), the matcher absorbs the credit-style
+drift it was missing (leading/trailing articles, `&`/`and`, bare
+`feat.`/`ft.` credits), and it no longer confuses numbered pieces
+("Symphony No. 1" vs "No. 2" used to score 0.923). A rehearsal also
+serves its own spins now instead of scraping the live page, which is how
+the numbered-title bug surfaced — that path had never once executed
+under rehearsal. See the run-27 update above. **Still worth revisiting
+against a real rip's real spins**: the corpus is hand-built, so it
+measures regression, not hit rate.
+
+`fetch_recent_spins(api_key,
 ...)` (the official API client) is left in place unused, in case the
 station ever does grant a key.
 
