@@ -1,0 +1,50 @@
+{
+  "_comment": [
+    "Labelled corpus for ROADMAP/FOCUS #1's Spinitron<->tracklist matcher.",
+    "Each case is [spin_artist, spin_song, track_artist, track_title, why].",
+    "A 'positive' is the SAME record credited two ways (a DJ typing it into",
+    "Spinitron vs whatever CDDB/MusicBrainz put on the disc) and MUST match.",
+    "A 'negative' is two different records that look similar and MUST NOT.",
+    "An 'accepted_false_positive' is a pair no string similarity can separate",
+    "(0.92+ apart by one letter, indistinguishable from a DJ's typo) which we",
+    "deliberately let through: a wrong match only re-orders the rip queue,",
+    "while tightening the threshold enough to exclude it would throw away the",
+    "real misspelling drift the feature exists to absorb. Recorded, not hidden.",
+    "Read by tests/test_spin_match_corpus.py (pins DEFAULT_THRESHOLD) and by",
+    "scripts/spin-match-eval.py (sweeps thresholds over it). One source: add a",
+    "case here, both see it. Hand-built from real credit-style drift, NOT",
+    "observed spins - a real rip's own spins are still the last word."
+  ],
+  "positives": [
+    ["Beatles", "Come Together", "The Beatles", "Come Together", "leading article dropped by the DJ"],
+    ["The Beatles", "Come Together", "Beatles", "Come Together", "and the mirror case, disc side bare"],
+    ["Rolling Stones, The", "Gimme Shelter", "The Rolling Stones", "Gimme Shelter", "library-style trailing article"],
+    ["Tank & The Bangas", "Boxes and Squares", "Tank and the Bangas", "Boxes & Squares", "ampersand vs and, both fields"],
+    ["Sly & the Family Stone", "Family Affair", "Sly and the Family Stone", "Family Affair", "ampersand in artist only"],
+    ["Kendrick Lamar feat. Zacari", "Love", "Kendrick Lamar", "LOVE.", "bare guest credit on the artist field"],
+    ["Kendrick Lamar", "Alright (feat. Zacari)", "Kendrick Lamar", "Alright", "bracketed guest credit on the title"],
+    ["Big Freedia ft Boyfriend", "Explode", "Big Freedia", "Explode", "ft. spelling of the same credit"],
+    ["Guns N' Roses", "Sweet Child O' Mine", "Guns N Roses", "Sweet Child O Mine", "apostrophes present vs absent"],
+    ["Belong", "Red Velvet or Nothing", "belong", "Red Velvet Or Nothing", "case only (real disc in this library)"],
+    ["Helen Gillet", "Running of the Bulls", "Helen Gillet", "Running Of The Bulls", "case only (real disc in this library)"],
+    ["Big Chief Monk Boudreaux and the Golden Eagles", "Indian Red", "Big Chief Monk Boudreaux & the Golden Eagles", "Indian Red", "real disc in this library, and/&"],
+    ["Home Video", "Sleep Sweet (Radio Edit)", "Home Video", "Sleep Sweet", "bracketed version qualifier"],
+    ["We Landed on the Moon", "These Little Wars", "We Landed On The Moon!", "These Little Wars", "trailing punctuation on the act name"],
+    ["Fri(G)id", "The Terminology Is Flawed", "fri(G)id", "The Terminology is Flawed", "parenthesised letters inside a real act name"]
+  ],
+  "negatives": [
+    ["OutKast", "Hey Ya!", "OutKast", "Hey", "prefix of a different song by the same act"],
+    ["The Cure", "Love Song", "The Cure", "Love", "one-word title is a prefix of another"],
+    ["The Beatles", "Come Together", "The Beatles", "Get Together", "one word different, same act"],
+    ["Radiohead", "Creep", "Coldplay", "Creep", "same title, different act"],
+    ["Radiohead", "Karma Police", "Radiohead", "Paranoid Android", "same act, unrelated songs"],
+    ["The Band", "The Weight", "The Bangles", "The Weight", "similar act names, same title"],
+    ["Belong", "October Language", "Belong", "October", "title truncated to one word"],
+    ["Tank and the Bangas", "Boxes and Squares", "Tank and the Bangas", "Rollercoasters", "same act, different song"],
+    ["Big Freedia", "Explode", "Big Freedia", "Explosion", "near-identical one-word titles"],
+    ["The The", "This Is the Day", "The", "This Is the Day", "degenerate all-noise act name must not collapse to a match"]
+  ],
+  "accepted_false_positives": [
+    ["Morgan Lane", "Just a Dreamer", "Morgan Lane", "Just a Dream", "one trailing letter apart - a real disc in this library vs a plausible other title; no threshold separates this from a typo"]
+  ]
+}

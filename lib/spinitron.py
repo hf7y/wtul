@@ -40,11 +40,26 @@ DEFAULT_PUBLIC_URL = "https://spinitron.com/WTUL/"
 # simpler and more stable than parsing the surrounding markup.
 _SPIN_ATTR_RE = re.compile(r'data-spin="([^"]*)"')
 # How closely a scraped track has to match a spin to count as "played".
-# 0.82 tolerates case/punctuation/whitespace drift (see _normalize) without
-# matching merely-similar different songs; still an unverified first guess -
-# tune against real data from fetch_recent_spins_public once a rip has
-# actually exercised it live.
+# 0.82 tolerates case/punctuation/whitespace drift (see _normalize and
+# _compare_key) without matching merely-similar different songs. No longer a
+# bare guess: `tests/test_spin_match_corpus.py` pins it against a labelled
+# corpus of real-world credit-style variants (positives that must match,
+# negatives that must not), and `scripts/spin-match-eval.py` sweeps the
+# threshold over that corpus so moving it is a measured decision. A real rip's
+# own spins are still the last word - the corpus is hand-built, not observed.
 DEFAULT_THRESHOLD = 0.82
+
+# Trailing guest-credit clause, unbracketed: Spinitron DJs type
+# "Kendrick Lamar feat. Zacari" where the disc's own metadata says just
+# "Kendrick Lamar". The bracketed form "(feat. Zacari)" is already handled by
+# _normalize's qualifier strip; this catches the bare one. Deliberately does
+# NOT include "with" or "&" - "Big Freedia & Boyfriend" is a different credit
+# from "Big Freedia", and "Sleeping With ..." is an ordinary title.
+_FEAT_RE = re.compile(r"\b(?:feat|ft|featuring)\b.*$")
+# Tokens whose presence/absence is pure credit-style drift, not identity:
+# "The Beatles"/"Beatles", "Rolling Stones, The", "Tank & The Bangas"/"Tank
+# and the Bangas". Dropped only for the second, looser comparison below.
+_NOISE_TOKENS = frozenset(("the", "and"))
 
 
 def _normalize(s):
@@ -57,8 +72,28 @@ def _normalize(s):
     return re.sub(r"\s+", " ", s).strip()
 
 
+def _compare_key(s):
+    """_normalize, then drop a trailing guest credit and the article/conjunction
+    tokens that two catalogues spell differently for the same act. Returns ""
+    for a string that is nothing but noise ("The"), which is why callers take
+    the max against the plain normalized ratio rather than using this alone -
+    two different acts both keyed to "" would otherwise compare as identical."""
+    n = _normalize(s)
+    n = _FEAT_RE.sub("", n).strip()
+    return " ".join(t for t in n.split() if t not in _NOISE_TOKENS)
+
+
 def _similarity(a, b):
-    return difflib.SequenceMatcher(None, _normalize(a), _normalize(b)).ratio()
+    """Best of two ratios: the strict normalized one, and the looser
+    credit-style-insensitive one. Taking the max can only ever raise a score,
+    which is the right direction - every miss this was built to fix is a false
+    negative (the disc and the spin naming the same record differently), and
+    the negative half of the corpus is what keeps the loosening honest."""
+    strict = difflib.SequenceMatcher(None, _normalize(a), _normalize(b)).ratio()
+    ka, kb = _compare_key(a), _compare_key(b)
+    if not ka or not kb:
+        return strict
+    return max(strict, difflib.SequenceMatcher(None, ka, kb).ratio())
 
 
 def spin_matches_track(spin, track_artist, track_title, threshold=DEFAULT_THRESHOLD):
