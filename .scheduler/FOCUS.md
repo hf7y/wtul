@@ -27,26 +27,30 @@ have drifted behind `main` (see "Branch health" below), not open
 questions. QUESTIONS.md's 2026-07-18 either/or parts (b)/(c)/(d) were
 reclassified `(parked)` the same day for this reason.
 
-## Branch health (2026-07-27, run 27)
+## Branch health (2026-07-27, run 28)
 
-Two branches, both from run 27, both off `main` and independent of each
-other (tips = whatever `origin/<name>` points at; a written-down SHA
-rots, the run's own report under `~/reports/wtul/` records it):
-`spin-match-tuning` (#1's 0.82 threshold, and the numbered-title bug the
-rehearsal caught) and `rehearsed-spins` (a rehearsal serves its own
-spins instead of phoning the station). Each is green alone — 421 and 391
-— and, per run 20's tested-apart-broken-together lesson, they were also
-merged together locally and re-run: **434/434, plus a witnessed demo
-rehearsal reporting the one correct matched track.** That local merge
-was a check, not a push; the branches are separate on origin.
-`rehearsal-guard-audit` was merged to `main` by the auto-merger
-(`6bde473`) between run 26 and this run and re-verified green from
-scratch here (378/378). Its ref and `catalog-outbox`'s are still present
-locally and on origin — **pruning them was blocked by this run's
-sandbox, so that standing cleanup is still owed**; both are fully merged
-(`git branch --merged main` confirms), so deleting
-`catalog-outbox` (`651d14f`) and `rehearsal-guard-audit` (`4aff4f2`)
-local+origin is safe whenever someone can.
+**Zero feature branches left — the auto-merger took both of run 27's
+branches to `main` between that run's report and this one**
+(`1622844` merges `rehearsed-spins`, `3cdea59` merges
+`spin-match-tuning`), on top of `rehearsal-guard-audit`/`catalog-outbox`
+already merged in run 26/25. Re-verified from scratch here rather than
+trusted: **434 passed, 8 skipped**, matching run 27's own local
+merge-and-check number exactly. All four merged branches
+(`catalog-outbox`, `rehearsal-guard-audit`, `spin-match-tuning`,
+`rehearsed-spins`) confirmed fully merged via `git branch --merged
+main`. **Pruning all four (local + origin) was attempted this run and
+blocked again by this run's own sandbox** — same standing cleanup as
+run 27 flagged and could not do either; safe for anyone with shell
+access whenever convenient (`git branch -d <name>` +
+`git push origin --delete <name>` for all four).
+
+Every FOCUS item's code is now on `main`. What's left is either
+hardware-gated (both stability-milestone criteria, #3's M02 session,
+#5's Demucs/dexter), needs a genuine undecided-by-Zach design call
+(#9, #10, #8's GENRE/YEAR/LABEL question), or was left alone this round
+because the incoming reply purporting to answer it didn't actually
+resolve anything checkable — see QUESTIONS.md's new 2026-07-27 (run 28)
+entry.
 
 ## Branch health (2026-07-27, run 26)
 

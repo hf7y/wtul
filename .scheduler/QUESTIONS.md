@@ -57,7 +57,6 @@ hand.
   hardware/manual - no purchase made. Revisit when ready to actually buy;
   this ties into ROADMAP.md's "capture-on-play" pipeline (#9) if relay
   playback becomes the live-source side of that eventually.
-> 3.5 ts cables on their way ahead of Friday's show. Just prepare a briefing
   for Zach on Friday if that aligns with the current milestone. 
 
 
@@ -87,7 +86,6 @@ hand.
   failure points in `rip_session()`, verifiable by ear on the next real
   rip that hits either path. The "real audio file" upgrade for (2)
   still awaits the output-device decision.**
-> Output both terminal bell and 3.5 with 3.5 goal and sunset wired up on
   terminal bell out the gate. 3.5 prebuilt for eventual earcons over 
   station cue principle. Deep vision.
 
@@ -108,7 +106,6 @@ hand.
   into ROADMAP #1 (Spinitron integration) and #9 (capture-on-play) -
   worth reconciling with both rather than freelancing a third mechanism
   when this actually gets built.
-> audio input source is wtul's own stream. http://129.81.255.83:8000/stream.m3u
   eaccon is in the works (see above). Combine Both = verdict. General principle
   should be wired up as mechanism not policy. Spawn two parallel research 
   trajectories towards the same goal with explicit deadlines and autograder.
@@ -132,7 +129,6 @@ hand.
   compilation/mix burn** - curation excludes them, they stay in
   `~/Music/ripped/` for a later identification pass rather than
   blocking or getting silently included in a mix.
-> Principle affirmed by principal 
 
 - **2026-07-24 (parked, bigger build): fingerprint-cache re-rips of
   previously-ripped discs, symlink instead of re-ripping. BUILT 2026-07-24
@@ -163,7 +159,6 @@ hand.
   against two real rips of the same physical disc a week apart** before
   being trusted - this round only exercised it against synthetic
   fixtures, never a real `rip_session()` run with an actual drive.
-> two real rips goal is unlikely to happen for a variety of reasons but
   namely that it goes against ritual. open to an 'achievment unlocked' 
   mode by which quests can be broadcast, maybe through the HUD UI to
   rip X cd today as a goal. Gamified probe experiment channel and human
@@ -192,7 +187,6 @@ hand.
   (c) something else entirely (out-of-range, printer-side sleep/wake
   quirk). Needs a dedicated session with the printer in hand to
   reproduce deliberately rather than firefighting mid-ritual.
-> yes we need to disable. this is properly delegated to senechal (a).
   (b) also yes belt and suspenders, but notify_senechal is what's
   really being tested here. watch that path. (c) detatched session
   as blocker. here's realistic timeline. I'll think about burning
@@ -216,7 +210,6 @@ hand.
   connection through* its own print, not just disconnecting once
   beforehand - the mid-print steal means a one-time pre-disconnect
   isn't enough).
-> I answered above before I saw this. If what I say contradicts you here,
   you were right. Failure here is that the update didn't auto consolidate
   itself with earlier for zach down into one question. Documents may
   retire their own questions by synthesis (this is basically choosing
@@ -240,7 +233,6 @@ hand.
   still hardware-gated: a real disc's real cover photo, which needs #4's
   live phone-capture flow. No decision needed from you; this is a status
   correction, not a new feature.
-> Great news. Look into scanscript from vkv-inventory, likely on the
   media arts collective public repo so you and see zach's in house
   means of capture.
 
@@ -265,7 +257,6 @@ hand.
   `~/reports/wtul/2026-07-25.md` for exact tip SHAs and pre-rebase SHAs
   to revert to if needed. No decision needed from you; this round was
   routine upkeep, not a new judgment call.
-> Possible new doctrine to ask realisateur about. Aesthetic is now agents
   build on agent branch, zach's branch drifts. Agents always try to 
   reconcile with zach. I believe I said *follow the leader*; correct
   me if I'm wrong. take the lead from realisateur on this one.
@@ -280,7 +271,6 @@ hand.
   never touches the drive), and it explicitly **does not clear any existing
   hardware gate** - both stability-milestone criteria are still exactly as
   gated on a real rip as they were. See FOCUS.md for usage/containment.
-> Can't count on a rip happening before Friday. These filings need to
   acknowledge ritual pace in reality to full understand if something is truly
   blocked. At the same time, noisy report to zach about what needs to be 
   reported on friday morning (in the HUD?), earcons on cue? See above.
@@ -295,7 +285,6 @@ hand.
   no delete endpoint. Look for **`Rehearsal Artist` / `Simulated Disc`, dated
   2026-07-25** on the sheet's LOCAL tab. (Prior hand-verification test rows
   from 2026-07-20 may still be there too, per #8's own note.)
-> Send this clean up job through the vim-arcade door so zach addresses it while
   learning how to do it.
 
 - **2026-07-25 (wtul-batch): judgment call for you, not a blocker.** All 7
@@ -306,7 +295,6 @@ hand.
   "0-behind" as the standing goal, so flagging the deviation. If you'd rather
   they stay strictly 0-behind regardless of what the commit touches, say so
   and the next run will rebase them each time.
-> defer to realisateur, notify, this might be addressed by the two branch
   philosophy. 
 
 - **2026-07-25 (wtul-batch): two production bugs fixed and merged straight
@@ -323,7 +311,6 @@ hand.
   tests) and **neither clears any hardware gate** - both milestone criteria
   are still exactly as gated on a real rip. Revert either with
   `git revert <sha>`.
-> Again, gating on a real rip when you know the show is not until friday
   is some kind of failure that a mechanism should guard against. I believe
   this has to do with marking your comments with timers, expiration dates.
   However, failing by continuing to check is the prefered failure mode so
@@ -340,7 +327,6 @@ hand.
   code, never disagreements between the code and the external tool it
   models - those need a check against the real artifact (here, sourcing
   `abcde.conf` and running its function).
-> The problem here is that you put in so much time building tooling to
   model something real because zach was asleep at the wheel. Earlier
   time-aware scheduling is the pattern here. Scheduler should enforce that
   things get filed with time information. 
@@ -353,7 +339,6 @@ hand.
   "strict-0-behind?" question in the only case that clearly matters: when
   `main` moves under a branch in code it touches, the rebase isn't
   optional. That question is still open for docs-only commits.
-> we are trying not to do docs-only commits, preferring mechanisms wired
   instead (reported to senechal of course). in this case, clean this up
   pending the incoming change to two-branch style, and make a scripted 
   record of your attempt as a fall back (built and wired, and let senechal
@@ -369,7 +354,6 @@ hand.
   wtul has neither. **Worth a look at wherever that injector picks its
   target repo**, since one of two suggestions was wrong and the other was
   misdelivered.
-> take another sweep over the fable review artifacts in realisateur. even
   if it didn't understand wtul, there are some lessons learned. report your
   learned lessons and this problem to realisateur to check on the health
   of other fable injections.
@@ -387,7 +371,6 @@ hand.
   `~/reports/wtul/2026-07-25.md` (run 19). This run did NOT merge anything
   itself - the remaining five all still carry hardware-verification gates
   or (rehearsal harness) the hold-for-your-review note.
-> Is this still true?
 
 - **2026-07-25 (wtul-batch, run 19): #6's `speed` report would have said
   'No rip logs yet' forever - fixed on `rip-speed-monitoring`
@@ -402,7 +385,6 @@ hand.
   eras. STILL HARDWARE-GATED for merge: the live per-track `(read speed
   N.Nx)` print only fires during a real rip; the milestone criterion is
   unchanged.
-> same above about not getting too navel gazing on hardware gate. be aware
   of the weekly rhythm. energy properly directed towards the next milestone
   rather than blocked workarounds. the law of wtul must be the weekly
   rhythm. I see that now. Hardware tests must be planned for fridays, and
@@ -418,7 +400,6 @@ hand.
   ('Label: print SUPPRESSED'), regression-tested, and witnessed by running
   the full demo disc for real. No hardware verification needed (the guard
   prevents hardware use; the ungated path is unchanged).
-> Wasting some tape is okay. Senechal owns devices. This might be an 
   expanded category of notify-senechal in that you shouldn't need to sweat
   tape usage on your own. just follow policy owned by device owner. 
 
@@ -444,7 +425,6 @@ hand.
   the input plugin lose interest) - flagging that as the first experiment
   for that session rather than doing it unattended, since with the printer
   absent there'd be no way to re-pair or verify anything.
-> Is this the ingrown hair of getting blocked on zach / IRL and overthinking?
 
 - **2026-07-26 (wtul-batch, run 20): main was BROKEN when this run started -
   fixed (`3f42a90`), but the cause needs your eyes on the auto-merger.** The
@@ -460,7 +440,6 @@ hand.
   same gap also broke `rip-speed-monitoring` far worse after rebase (24
   failures, below). No decision needed on the fix itself; the flag is about
   the merge gate.
-> mechanism not prose might apply here? who owns this pattern?
 
 - **2026-07-26 (wtul-batch, run 20): real production bug found under the
   same failures, fixed on `main` (`3f42a90`) - no hardware needed, none
@@ -471,7 +450,6 @@ hand.
   music in it, instead of the corrected folder. The marker now follows the
   moved music; rehearsal tests assert its presence/content; mutation-
   checked. Revert: `git revert 3f42a90`.
-> excellent. this gets filed by bibliothecaire as wins after you get directed
   to self clean under realisateur supervision. Graded W for win.
 
 - **2026-07-26 (wtul-batch, run 20): `rip-speed-monitoring` rebased +
@@ -486,7 +464,6 @@ hand.
   mungefilename lesson. FakeDrive now emits cdparanoia's real `|N.Nx|`
   format, and a rehearsal witnesses the print for real. The milestone
   criterion is unchanged: a real rip is still the gate.
-> Thanks. But see above.
 
 - **2026-07-26 (wtul-batch, run 20): third member of the rehearsal
   containment class, fixed on `web-photo-capture` (`ac85159`).** With
@@ -496,7 +473,6 @@ hand.
   catalog row and the label print, same cause: main's features moving onto
   a rehearsed path). Pairing is now suppressed under rehearsal,
   regression-tested like its two predecessors.
-> Not sure I understand. The photo stays with the disc right? Stored on
   Google's side in Drive?
 
 - **2026-07-26 (wtul-batch, run 20): #10 (show-run sheet sweeper-prime web
@@ -513,7 +489,6 @@ hand.
   browser pointed at the GAS `/exec` URL, same hosting shape as #4/#8, no
   new server. Reply with the run-sheet URL + yes/veto per default and the
   next run builds it; silence keeps it deferred, not guessed at.
-> https://docs.google.com/spreadsheets/d/1GzIbZUhn6fF7JPC20kdG2IMomvZlDBidDTy5cDEF3U8/edit?gid=1753821521#gid=1753821521 , https://script.google.com/u/0/home/projects/1ed2WEziF9LVxsAm_RdAXmh4y61GZevBSD8NRvZJn6x4UcE7sdPQDH9uE/edit , https://script.google.com/macros/s/AKfycbzWVJpA_-1uI72e3WmWICcQepO2P4eg6ehvF5TJC7YYT7ZDrAo2iqnoIdzFnbtgPcWHdA/exec , hf7y.com/localshow.html , build it.
 
 - **2026-07-26 (wtul-batch, run 21): built the third metadata-fix fallback
   on new branch `musicbrainz-fallback` (`5a872c8` + `07f880d`) - answers
@@ -531,7 +506,6 @@ hand.
   hardware; the full `fix <discid>` flow against a real freshly-ripped
   disc remains part of #2's existing real-rip gate - this doesn't clear
   it.** No decision needed from you.
-> Yeah yeah. But thank you sincerely.
 
 - **2026-07-26 (wtul-batch, run 21): the auto-merger merged #4+#7
   (`ocr-metadata-extraction`, which contains `web-photo-capture`) into
@@ -570,7 +544,6 @@ hand.
   going forward? The next real rip remains the actual verification
   either way. (This is the second auto-merger flag; run 20's
   no-post-merge-test gap still stands.)
-> distinguishing hardware gated branches is a mature idea I didn't consider.
   Perhaps this is a refinement on zach's two-branch approach. Worth 
   special casing for wtul? or is being time-aware and properly scheduling
   hardware tests for fridays the cleaner path?
@@ -589,7 +562,6 @@ hand.
   matched literally via `glob.escape`. 4 regression tests, each
   mutation-checked against the pre-fix code. Revert: `git revert
   1c4f488`. No decision needed from you.
-> Nice. This is reports material right? 
 
 - **2026-07-26 (wtul-batch, run 23): built `wtul-rip doctor`, a no-disc
   preflight - branch `preflight-doctor` (`4aae15f`), NOT merged.** Answers
@@ -793,8 +765,44 @@ hand.
   (repo-root artifact scan); `wtul-batch` is backlog-driven off this
   FOCUS.md only, so a dropped file here is invisible to it. Two separate
   questions:
-  > 1. This specific file — commit it as reference material, or was it
-  >    meant to trigger something (a scan/idea-inference) that doesn't
-  >    exist yet for wtul?
-  > 2. Standing: should wtul grow a realisateur-style inbox-scan step, or
-  >    is backlog-only intake the intended shape for this project?
+  1. This specific file — commit it as reference material, or was it
+     meant to trigger something (a scan/idea-inference) that doesn't
+     exist yet for wtul?
+  2. Standing: should wtul grow a realisateur-style inbox-scan step, or
+     is backlog-only intake the intended shape for this project?
+
+- **2026-07-27 (wtul-batch, run 28): the collected replies this run were
+  mostly not actionable, and one was a real bug worth naming.** Ran
+  `collect-feedback.sh --consume` and got back 30+ `### REPLY` blocks.
+  Reviewed each against its target entry (via `git diff` on the stripped
+  `> ` lines, not guessed from truncated context) before acting on
+  anything, per this run's own security brief. Findings:
+  - **Bug: the CD-500 manual PDF entry's own two sub-questions (directly
+    above) were themselves written with a leading `> `**, so
+    `--consume` stripped them as if they were a *reply*, not the
+    question's own body — they are restored above rather than treated as
+    answered. Worth fixing at the source (whatever wrote that entry
+    should not have blockquoted its own questions) so the next `> `
+    doesn't eat real content again.
+  - **Nothing else was cleanly resolved enough to delete.** The great
+    majority of replies were fragmented, philosophical, or instructed
+    delegating to other systems/projects (senechal, realisateur,
+    bibliothecaire, vim-arcade, scanscript/vkv-inventory) rather than
+    answering the specific either/or the entry asked — e.g. the M02 BLE
+    reply said "yes disable [the OS auto-reconnect]... delegated to
+    senechal", but disabling a machine-wide Bluetooth setting without
+    the printer in hand to verify is exactly the kind of unattended
+    machine-wide config change this run was told to avoid, so it was
+    **not done**; the #10 web-UI reply was a bare dump of the same
+    Sheets/Apps-Script/`hf7y.com` links already on record from run 24
+    plus "build it", with no actual yes/veto on the three proposed
+    defaults, so **no fetch, no build** — those links were already used
+    for exactly what they answered (see #4's 2026-07-27 update) and this
+    reply added nothing checkable. A few (the run-19/20/21/22/23/25/26/27
+    "thanks"/"nice"/rhetorical-question replies) were closing remarks on
+    entries this run's own report already treats as informational, not
+    new decisions — left in place rather than guessed at. None of the
+    entries above were deleted this run as a result; each still carries
+    its original open question. **No decision needed from you** beyond
+    what's already flagged inline in older entries — this is a status
+    note, not a new blocker.
