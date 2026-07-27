@@ -490,3 +490,41 @@ hand.
   matched literally via `glob.escape`. 4 regression tests, each
   mutation-checked against the pre-fix code. Revert: `git revert
   1c4f488`. No decision needed from you.
+- **2026-07-26 (wtul-batch, run 23): built `wtul-rip doctor`, a no-disc
+  preflight - branch `preflight-doctor` (`4aae15f`), NOT merged.** Answers
+  "is this rig ready to rip?" from the machine alone: required binaries,
+  /dev/sr0 present+readable, both abcde config files, disk space and mix-folder
+  writability, stale lockfile, abandoned abcde scratch dirs, credentials, and
+  metadata-service reachability. Exits nonzero on any FAIL so it can gate a
+  script. 32 new tests, all against injected synthetic state (no drive, no
+  network, no installed abcde); both directions of its central comparison
+  mutation-checked; 318/318 overall. **Hardware verification status:** the
+  doctor itself needs none - it *reports on* hardware rather than using it,
+  and it was witnessed live on this machine (correctly FAILing on the absent
+  drive, with real network probes to Spinitron/AcoustID/Discogs/MusicBrainz).
+  What it cannot do is prove a rip works; a green doctor means "nothing known
+  is broken", not "verified end to end".
+- **2026-07-26 (wtul-batch, run 23): the doctor's first run found a live
+  production breakage on this machine, and I fixed it outside the repo -
+  please sanity-check.** The installed `~/.abcde.conf` still had
+  `OUTPUTDIR=$HOME/Music/ripped`: the 2026-07-24 ripped->mixes migration
+  changed the repo's copy, but `install.sh` silently leaves an existing
+  `~/.abcde.conf` alone, so the live machine never got it. The next real rip
+  would have written into the retired `~/Music/ripped` while `wtul-rip` looked
+  in `~/Music/mixes/<date>` - abcde "succeeds", every downstream step
+  (tracklist, retagging, catalog write-back, re-rip cache) reads an empty
+  directory. Since it would have broken the next show night, I installed the
+  repo's `abcde.conf` over it; the previous file is backed up verbatim at
+  `~/.abcde.conf.pre-mixes-migration.2026-07-26` (restore with `cp`), and it
+  differed from the repo's copy in *only* those two variables. **If you had
+  hand-edits in that file, check the backup.** `install.sh` on the branch now
+  diffs and warns loudly instead of staying quiet - it still never overwrites.
+- **2026-07-26 (wtul-batch, run 23): judgment call - should `doctor` become a
+  gate rather than a thing you remember to run?** It's currently opt-in
+  (`wtul-rip doctor`). The options: (a) leave it opt-in; (b) run it
+  automatically at `wtul-rip` startup and print warnings but never block;
+  (c) run it at startup and refuse to enter the watch loop on a FAIL. (c) is
+  the safest for show night but would have refused to start on this very
+  machine today (no drive attached) even for rehearsal use, so I did not guess
+  - it changes the tool's behavior for you, not just its capability. Tell me
+  which and it's a small change.

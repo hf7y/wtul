@@ -27,6 +27,24 @@ have drifted behind `main` (see "Branch health" below), not open
 questions. QUESTIONS.md's 2026-07-18 either/or parts (b)/(c)/(d) were
 reclassified `(parked)` the same day for this reason.
 
+## Branch health (2026-07-26, run 23)
+
+One branch, `preflight-doctor` (`4aae15f`), 0 behind `main`: adds
+`wtul-rip doctor`, a no-disc preflight. See QUESTIONS.md's run-23
+entries. Everything below this line is the older 2026-07-24 note, kept
+for its migration warnings; all four branches it names are long since
+merged and pruned.
+
+**Live-machine finding, run 23:** the doctor's first run caught that the
+installed `~/.abcde.conf` had never received the 2026-07-24
+ripped->mixes migration (`install.sh` leaves an existing config alone
+and said nothing), so the next real rip would have written to the
+retired `~/Music/ripped` while `wtul-rip` read `~/Music/mixes/<date>`.
+Fixed on the machine, backup at `~/.abcde.conf.pre-mixes-migration.2026-07-26`;
+`install.sh` on the branch now warns on drift. **The general lesson: a
+repo-side config change is not deployed until something checks the
+installed copy** - that is now what `doctor` is for.
+
 ## Branch health (2026-07-24, foundation note for the next dev cycle)
 
 Four feature branches are built but unmerged, and **all four are stale
