@@ -29,7 +29,7 @@ reclassified `(parked)` the same day for this reason.
 
 ## Branch health (2026-07-27, run 25)
 
-One branch, `catalog-outbox` (`51d9632`), 0 behind `main`: the catalog
+One branch, `catalog-outbox` (`1a15767`), 0 behind `main`: the catalog
 retry queue, see the run-25 update below and QUESTIONS.md's run-25
 entries. `preflight-doctor` (merged `112673c`) and `catalog-dj-name`
 (merged `9885422`) are both fully in `main` and their refs are pruned
@@ -294,7 +294,7 @@ catalog unattributed. See #8 below. Milestone criteria unchanged — both
 are still gated on a real rip, and no rip has happened.
 
 **Update (2026-07-27, run 25): a completed rip can no longer lose its
-catalog row — branch `catalog-outbox` (`51d9632`), not merged.** The
+catalog row — branch `catalog-outbox` (`1a15767`), not merged.** The
 auto-merger took `catalog-dj-name` to `main` between run 24's report and
 this run; the merged result re-verified GREEN from scratch (322/322 plus
 a witnessed full demo rehearsal — sandboxed rip, live `(read speed 4.2x)`
@@ -314,7 +314,7 @@ simulated album at the live catalog URL. `catalog_retry()` gated its
 suppression on `SIM`, which `init_simulation()` builds — and the
 `catalog` subcommand exits before the watch loop, so it never calls it.
 Fixed to gate on `SIMULATING` (set at import, true on every entry point),
-`51d9632`. **Fifth instance of the same class** as the 2026-07-25 catalog
+`1a15767`. **Fifth instance of the same class** as the 2026-07-25 catalog
 leak and label print: a new code path reaching a real-world side effect
 that the rehearsal guard didn't know about yet. Worth stating as a rule
 for whatever gets built next — *any new entry point that can touch the
@@ -691,7 +691,7 @@ Needs before starting:
 ### 8. Auto-update the local music catalog spreadsheet
 
 **Update (2026-07-27, run 25): a failed row is queued, not lost — branch
-`catalog-outbox` (`51d9632`), not merged.** `write_row()` already knew
+`catalog-outbox` (`1a15767`), not merged.** `write_row()` already knew
 the difference between "the POST landed" and "the POST's response lied"
 (it re-GETs to confirm). What it could not do was survive a `False`.
 `lib/catalog_outbox.py` keeps the row in a JSON file at `MIXES_ROOT`

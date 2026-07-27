@@ -560,7 +560,7 @@ hand.
   unattended run could not do it, is appended under `## wtul` there
   (scheduler `33ca45f`).
 - **2026-07-27 (wtul-batch, run 25): built, branch `catalog-outbox`
-  (`51d9632`) — a completed rip can no longer silently lose its catalog
+  (`1a15767`) — a completed rip can no longer silently lose its catalog
   row.** When the write-back failed, `wtul-rip` printed one line ("add it
   to the sheet by hand if it matters") and forgot the row; on show night
   that line scrolls off behind the next disc's tracklist. Putting the disc
@@ -593,7 +593,7 @@ hand.
   simulated album at the live catalog URL — `catalog_retry()` gated its
   suppression on `SIM`, which is built by `init_simulation()`, and the new
   `catalog` subcommand exits before the watch loop and so never calls it
-  (fixed to gate on `SIMULATING`, `51d9632`). That is the **fifth**
+  (fixed to gate on `SIMULATING`, `1a15767`). That is the **fifth**
   instance of one class (2026-07-25's catalog leak and label print, run
   20's photo pairing, run 19's harness print). Proposed rule, adopt or
   drop: *any new entry point that can touch the sheet, the printer or the
