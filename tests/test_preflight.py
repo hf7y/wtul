@@ -44,6 +44,7 @@ def make_ctx(**over):
         now=lambda: 1_000_000,
         import_ok=lambda m: True,
         lock_is_stale=lambda p: True,
+        outbox_pending=lambda: [],
     )
     base.update(over)
     return preflight.Context(**base)
@@ -277,3 +278,38 @@ def test_report_prints_the_fix_line_only_for_problems():
     text = preflight.format_report(preflight.run_checks(ctx))
     assert "fix: apt-get install lame" in text
     assert text.count("fix:") == 1
+
+
+# -- catalog outbox (FOCUS.md #8) ---------------------------------------
+
+
+def test_empty_catalog_outbox_is_ok():
+    checks = preflight.run_checks(make_ctx(), checks=[preflight.check_catalog_outbox])
+    assert checks[0].status == preflight.OK
+
+
+def test_queued_catalog_rows_warn_and_name_the_discs():
+    pending = [{"row": {"ARTIST": "Belong", "ALBUM": "October Language"}}]
+    checks = preflight.run_checks(make_ctx(outbox_pending=lambda: pending),
+                                  checks=[preflight.check_catalog_outbox])
+    assert checks[0].status == preflight.WARN
+    assert "Belong - October Language" in checks[0].detail
+    assert "wtul-rip catalog" in checks[0].fix
+
+
+def test_many_queued_rows_are_summarised_not_dumped():
+    pending = [{"row": {"ARTIST": f"A{i}", "ALBUM": f"B{i}"}} for i in range(5)]
+    check = preflight.run_checks(make_ctx(outbox_pending=lambda: pending),
+                                 checks=[preflight.check_catalog_outbox])[0]
+    assert "5 rip(s)" in check.detail
+    assert "+2 more" in check.detail
+    assert "A4" not in check.detail
+
+
+def test_unwired_outbox_says_so_rather_than_claiming_empty():
+    """A check that can't see the queue must not report a clean rig - that
+    is how "all green" stops meaning anything."""
+    check = preflight.run_checks(make_ctx(outbox_pending=None),
+                                 checks=[preflight.check_catalog_outbox])[0]
+    assert check.status == preflight.WARN
+    assert "not wired" in check.detail
