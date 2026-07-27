@@ -602,6 +602,37 @@ def test_catalog_retry_is_suppressed_under_a_rehearsal(monkeypatch, tmp_path, ca
     assert len(mod.catalog_outbox.load(mod.CATALOG_OUTBOX_FILE)) == 1
 
 
+def test_catalog_retry_is_suppressed_before_init_simulation(monkeypatch, tmp_path, capsys):
+    """`wtul-rip catalog` exits before the watch loop and so never calls
+    init_simulation() - SIM is still None there even under
+    WTUL_SIMULATE_DRIVE. Gating the flush on SIM would leave that entry
+    point free to POST a sandboxed rehearsal's simulated albums into the
+    station's live catalog; witnessed doing exactly that before the guard
+    moved to SIMULATING."""
+    monkeypatch.setattr("sys.argv", ["wtul-rip"])
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("WTUL_SIMULATE_DRIVE", _write_spec(tmp_path))
+    monkeypatch.setenv("WTUL_SIMULATE_ROOT", str(tmp_path / "sandbox"))
+    monkeypatch.delenv("WTUL_SIMULATE_ALLOW_CATALOG", raising=False)
+    loader = SourceFileLoader("wtul_rip_precatalog", _MODPATH)
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+
+    assert mod.SIM is None and mod.SIMULATING is True
+    mod.CATALOG_WRITEBACK_URL = "https://example.invalid/exec"
+    mod.catalog_outbox.queue(mod.CATALOG_OUTBOX_FILE,
+                             {"ARTIST": "Belong", "ALBUM": "October Language",
+                              "DATE": "2026-07-27"})
+    monkeypatch.setattr(mod.catalog_writeback, "write_row",
+                        lambda url, row: pytest.fail("flushed a rehearsal outbox to the real sheet"))
+    monkeypatch.setattr(mod.catalog_writeback, "confirm_row",
+                        lambda *a, **k: pytest.fail("flushed a rehearsal outbox to the real sheet"))
+    mod.catalog_retry()
+    assert "SUPPRESSED (rehearsal)" in capsys.readouterr().out
+    assert len(mod.catalog_outbox.load(mod.CATALOG_OUTBOX_FILE)) == 1
+
+
 def test_catalog_retry_flushes_a_queued_row(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("WTUL_SIMULATE_ALLOW_CATALOG", "1")
     mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))

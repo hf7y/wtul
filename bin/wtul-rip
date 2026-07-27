@@ -1246,10 +1246,18 @@ def catalog_retry(quiet_when_empty=False):
         print(f"   {line}")
     # Same containment rule as the write-back itself: a rehearsal must not
     # be able to POST into the station's live rotation catalog, and that
-    # includes flushing a queue. (A rehearsal's own outbox lives in the
-    # sandbox, so this only ever guards a real outbox reached with
-    # WTUL_SIMULATE_DRIVE set - but that is precisely the confusing case.)
-    if SIM is not None and not SIMULATE_ALLOW_CATALOG:
+    # includes flushing a queue - a rehearsal's outbox holds simulated
+    # albums, so flushing it is precisely the leak.
+    #
+    # Gated on SIMULATING, not `SIM is not None`, and that difference is
+    # load-bearing: SIM is built by init_simulation(), which `wtul-rip
+    # catalog` never calls (it exits before the watch loop, like `speed`
+    # and `doctor`). Witnessed doing exactly the wrong thing during this
+    # branch's own live check - `WTUL_SIMULATE_DRIVE=demo wtul-rip catalog`
+    # read the sandboxed outbox and then flushed it against the real URL.
+    # SIMULATING is set at import from the env var, so it is true on every
+    # entry point.
+    if SIMULATING and not SIMULATE_ALLOW_CATALOG:
         print("   Retry SUPPRESSED (rehearsal) - rerun without "
               "WTUL_SIMULATE_DRIVE to flush these.")
         return
