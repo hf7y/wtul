@@ -175,3 +175,36 @@ def test_eval_script_runs_and_reports_the_corpus_separable():
     assert "BAD" not in text, f"eval reports a mislabelled case:\n{text}"
     assert "separable:" in text
     assert mod.main([]) == 0
+
+
+# --- numbering: found by running the demo rehearsal, not by reading ---------
+
+def test_numbers_reads_digits_and_words_alike():
+    assert sp._numbers("Symphony No. 2") == ["2"]
+    assert sp._numbers("Simulated Track Two") == ["2"]
+    assert sp._numbers("Alright") == []
+    assert sp._numbers("Blink 182") == ["182"]
+    assert sp._numbers(None) == []
+    # Order matters: "Part 1 of 2" is not "Part 2 of 1".
+    assert sp._numbers("Part 1 of 2") == ["1", "2"]
+
+
+def test_roman_numerals_are_deliberately_not_handled():
+    """Documented as a known gap rather than half-implemented: "Part III" vs
+    "Part II" still relies on the plain ratio. If this ever starts mattering,
+    the fix belongs in _numbers with its own corpus cases."""
+    assert sp._numbers("Part III") == []
+
+
+def test_disagreeing_numbers_cap_the_score_regardless_of_similarity():
+    assert sp._similarity("Symphony No. 1", "Symphony No. 2") <= sp.NUMBER_MISMATCH_CAP
+    assert sp._similarity("Untitled 3", "Untitled") <= sp.NUMBER_MISMATCH_CAP
+    # ...and the cap is well clear of the threshold, not just under it.
+    assert sp.NUMBER_MISMATCH_CAP < sp.DEFAULT_THRESHOLD - 0.2
+
+
+def test_agreeing_numbers_are_left_alone():
+    """The rule must not become "anything with a number is suspicious"."""
+    assert sp._similarity("Symphony No 4", "Symphony No. 4") == 1.0
+    assert sp._similarity("Blink-182", "Blink 182") == 1.0
+    assert sp._similarity("Simulated Track Two", "Simulated Track 2") >= sp.DEFAULT_THRESHOLD

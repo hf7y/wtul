@@ -30,6 +30,8 @@
     ["Big Chief Monk Boudreaux and the Golden Eagles", "Indian Red", "Big Chief Monk Boudreaux & the Golden Eagles", "Indian Red", "real disc in this library, and/&"],
     ["Home Video", "Sleep Sweet (Radio Edit)", "Home Video", "Sleep Sweet", "bracketed version qualifier"],
     ["We Landed on the Moon", "These Little Wars", "We Landed On The Moon!", "These Little Wars", "trailing punctuation on the act name"],
+    ["Rehearsal Artist", "Simulated Track Two", "Rehearsal Artist", "Simulated Track 2", "word and digit for the SAME number must still match - the numbering rule must not become a word/digit mismatch"],
+    ["Boston Symphony", "Symphony No 4", "Boston Symphony", "Symphony No. 4", "same number, punctuation drift only"],
     ["Fri(G)id", "The Terminology Is Flawed", "fri(G)id", "The Terminology is Flawed", "parenthesised letters inside a real act name"]
   ],
   "negatives": [
@@ -42,6 +44,10 @@
     ["Belong", "October Language", "Belong", "October", "title truncated to one word"],
     ["Tank and the Bangas", "Boxes and Squares", "Tank and the Bangas", "Rollercoasters", "same act, different song"],
     ["Big Freedia", "Explode", "Big Freedia", "Explosion", "near-identical one-word titles"],
+    ["Rehearsal Artist", "Simulated Track One", "Rehearsal Artist", "Simulated Track Two", "the demo rehearsal's own over-match, 2026-07-27: 0.895 before the numbering rule"],
+    ["Boston Symphony", "Symphony No. 1", "Boston Symphony", "Symphony No. 2", "numbered works are different pieces, not fuzz (0.923 before the rule)"],
+    ["belong", "Untitled 3", "belong", "Untitled", "a numbered piece vs its unnumbered namesake"],
+    ["Some Act", "Part One", "Some Act", "Part Two", "spelled-out numbering, same class"],
     ["The The", "This Is the Day", "The", "This Is the Day", "degenerate all-noise act name must not collapse to a match"]
   ],
   "accepted_false_positives": [

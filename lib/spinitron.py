@@ -60,6 +60,21 @@ _FEAT_RE = re.compile(r"\b(?:feat|ft|featuring)\b.*$")
 # "The Beatles"/"Beatles", "Rolling Stones, The", "Tank & The Bangas"/"Tank
 # and the Bangas". Dropped only for the second, looser comparison below.
 _NOISE_TOKENS = frozenset(("the", "and"))
+# Number words this treats as their digits, so "Track One"/"Track 1" are the
+# same item and "Track One"/"Track Two" are not. Small on purpose: past
+# twenty, spelled-out numbers in a title are vanishingly rare and each entry
+# is another way to be wrong.
+_NUMBER_WORDS = {
+    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+    "eleven": "11", "twelve": "12", "thirteen": "13", "fourteen": "14",
+    "fifteen": "15", "sixteen": "16", "seventeen": "17", "eighteen": "18",
+    "nineteen": "19", "twenty": "20",
+}
+# What two strings score once their numbering disagrees. Not 0.0: the eval
+# report is more readable when a capped pair still shows it was otherwise
+# similar, which is exactly the case worth eyeballing.
+NUMBER_MISMATCH_CAP = 0.5
 
 
 def _normalize(s):
@@ -83,6 +98,18 @@ def _compare_key(s):
     return " ".join(t for t in n.split() if t not in _NOISE_TOKENS)
 
 
+def _numbers(s):
+    """The sequence of numbers a string carries, digits and words alike.
+
+    "Symphony No. 2" -> ["2"]; "Simulated Track Two" -> ["2"]; "Alright" -> [].
+    Roman numerals are deliberately not handled - "Part III" is rare enough
+    in this station's catalogue that guessing at it would add more wrong
+    answers than it removes.
+    """
+    return [_NUMBER_WORDS.get(t, t) for t in _normalize(s).split()
+            if t.isdigit() or t in _NUMBER_WORDS]
+
+
 def _similarity(a, b):
     """Best of two ratios: the strict normalized one, and the looser
     credit-style-insensitive one. Taking the max can only ever raise a score,
@@ -91,9 +118,21 @@ def _similarity(a, b):
     the negative half of the corpus is what keeps the loosening honest."""
     strict = difflib.SequenceMatcher(None, _normalize(a), _normalize(b)).ratio()
     ka, kb = _compare_key(a), _compare_key(b)
-    if not ka or not kb:
-        return strict
-    return max(strict, difflib.SequenceMatcher(None, ka, kb).ratio())
+    score = strict
+    if ka and kb:
+        score = max(strict, difflib.SequenceMatcher(None, ka, kb).ratio())
+    # Numbering is the one difference a character-ratio systematically
+    # under-weights: "Symphony No. 1"/"No. 2" scores 0.923 and "Simulated
+    # Track One"/"Track Two" 0.895, both over the line, because one short
+    # token differs inside a long shared string. Caught by running the demo
+    # rehearsal (2026-07-27), which reported all three tracks as already
+    # played from spins naming one. A station that plays this much classical
+    # and experimental music hits Symphony No. N and Untitled N constantly,
+    # so a disagreement about which number is a disagreement about which
+    # piece - not fuzz to absorb.
+    if _numbers(a) != _numbers(b):
+        return min(score, NUMBER_MISMATCH_CAP)
+    return score
 
 
 def spin_matches_track(spin, track_artist, track_title, threshold=DEFAULT_THRESHOLD):
