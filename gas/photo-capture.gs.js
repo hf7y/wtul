@@ -4,7 +4,7 @@
  * Bespoke doGet/doPost shape, NOT the bug/feature/resolve contract in the
  * scheduler's INTAKE.md - see lib/photo_capture.py's module docstring for
  * why that shape doesn't fit "one photo, tied to one disc, consumed
- * once." Open question for the user (see .claude/QUESTIONS.md): deploy
+ * once." Open question for the user (see .scheduler/QUESTIONS.md): deploy
  * this standalone (as built here), or fold it into the existing GAS
  * project already backing the ROADMAP #4 sheet - this session had no way
  * to read that project's live Apps Script source to check.

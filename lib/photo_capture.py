@@ -18,7 +18,7 @@ Network and subprocess calls are the only untested-by-real-hardware edges
 here - no CD drive or phone needed to exercise the polling/download/embed
 logic itself (mocked in tests/test_photo_capture.py), but the actual
 "open this URL on a phone and take a photo" flow has never been run for
-real. See ROADMAP.md #4 and .claude/QUESTIONS.md for the open question
+real. See ROADMAP.md #4 and .scheduler/QUESTIONS.md for the open question
 this still needs a human answer on (fold into the existing GAS project
 backing the sheet in ROADMAP.md #4, or deploy standalone as built here).
 """

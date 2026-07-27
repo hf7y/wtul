@@ -64,7 +64,7 @@ Every one of those built-but-unverified features (#3, #4, #6, #7) lives
 on a branch that **predates today's four fixes above** — `main` has
 moved 13–36 commits past each of them. Picking any of them back up as a
 plain merge would silently *reintroduce* bugs this session just caught
-live. Full detail in `.claude/FOCUS.md`'s "Branch health" note and
+live. Full detail in `.scheduler/FOCUS.md`'s "Branch health" note and
 ROADMAP.md's per-item status blocks; the short version: **rebase before
 touching, for all four, starting with `rip-speed-monitoring`** since
 it's the one item standing between wtul and its current stability
@@ -98,7 +98,7 @@ dated mix folder → burn → print a label to bring to next week's show).
 burned, no label got printed.** Burning was never in scope for this
 session (out of scope for `wtul-rip` itself per the pipeline vision in
 ROADMAP.md - a manual step regardless). The label did not print due to
-the M02 BLE issue above (`.claude/QUESTIONS.md`'s "Phomemo M02 BLE
+the M02 BLE issue above (`.scheduler/QUESTIONS.md`'s "Phomemo M02 BLE
 connection is unreliable" entry) - real label content was built,
 previewed, and repeatedly attempted, but every attempt either failed to
 connect or was interrupted mid-print. What *did* get done and is solid

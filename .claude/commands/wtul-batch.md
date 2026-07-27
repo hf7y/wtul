@@ -17,14 +17,14 @@ This runs unattended, on a weekly/bi-weekly cadence (the show this
 project supports is weekly), with no human review step until the user
 next opens the machine. Build first, don't just analyze: pick the most
 reasonable interpretation of a FOCUS.md item and build it, on its own
-branch, flagged in `.claude/QUESTIONS.md` and the report. Only actually
+branch, flagged in `.scheduler/QUESTIONS.md` and the report. Only actually
 stop and wait for the user when the action itself can't be reverted --
 an ordinary commit, branch, or report write never qualifies.
 
-## 0a. Pick up the user's replies to `.claude/QUESTIONS.md` first
+## 0a. Pick up the user's replies to `.scheduler/QUESTIONS.md` first
 
 Before anything else, run
-`"$SCHEDULER_REPO"/bin/collect-feedback.sh .claude/QUESTIONS.md --consume`
+`"$SCHEDULER_REPO"/bin/collect-feedback.sh .scheduler/QUESTIONS.md --consume`
 (scheduler repo path: `~/Documents/Project Archive/scheduler`). QUESTIONS.md
 is append-only by convention, so nothing else ever reads back a `> ` reply
 the user left inline -- this step is the one thing that does. For each
@@ -61,7 +61,7 @@ a drive attached when the job runs**. That means:
 ## 1. Orient
 
 `git log --oneline -10`, current branch state, `README.md` if one
-exists, and `.claude/FOCUS.md` in full. If a previous batch run left work
+exists, and `.scheduler/FOCUS.md` in full. If a previous batch run left work
 in progress (check the last report under `~/reports/wtul/`), pick up
 from there rather than starting over.
 
@@ -73,7 +73,7 @@ test harness) before building further on top of it.
 
 ## 3. Push forward, building rather than just analyzing
 
-Pick the most tractable, highest-value item(s) from `.claude/FOCUS.md`
+Pick the most tractable, highest-value item(s) from `.scheduler/FOCUS.md`
 given the time budget (`MAX_TURNS`) - use judgment on what's worth
 advancing this round; note the choice and why in the report. Commit as
 you complete meaningful chunks; do not save it all for one giant commit
@@ -85,7 +85,7 @@ onto whatever branch happens to be checked out.
 
 If a FOCUS.md item turns out to need a real decision only the user can
 make (which API/vendor, which hardware, a genuine tradeoff), don't guess
-- write it up in `.claude/QUESTIONS.md` and move to the next item instead
+- write it up in `.scheduler/QUESTIONS.md` and move to the next item instead
 of blocking the whole run on it.
 
 ## 4. Stress-test what you built (within the hardware constraint above)
@@ -96,7 +96,7 @@ breaks; note what's genuinely out of scope for this round.
 
 ## 5. Flag what you built, and anything needing the user's own judgment
 
-Append-only in `.claude/QUESTIONS.md`, format
+Append-only in `.scheduler/QUESTIONS.md`, format
 `- **YYYY-MM-DD (wtul-batch):** <text>`:
 
 - Every feature/distinct new idea built this round - which branch, what
@@ -111,7 +111,7 @@ Append-only in `.claude/QUESTIONS.md`, format
 `~/reports/wtul/$(date +%Y-%m-%d).md`, and update `~/reports/wtul/LATEST.md`
 to match it. Cover: what shipped (with commit references), what's still
 pending hands-on hardware verification, what was deliberately deferred
-and why, and whether anything got appended to `.claude/QUESTIONS.md`
+and why, and whether anything got appended to `.scheduler/QUESTIONS.md`
 (point at it, don't duplicate its full text here).
 
 ## 7. Before finishing

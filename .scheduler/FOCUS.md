@@ -355,7 +355,7 @@ startup via `os.environ.setdefault`, real env vars still win):
 `ACOUSTID_API_KEY` (since 2026-07-20) and now `DISCOGS_TOKEN` (the
 "localshow" token, per the realisateur decision recorded 2026-07-24 to
 go with Discogs over further AcoustID/Chromaprint work - see
-`.claude/QUESTIONS.md`'s consumed reply). `libchromaprint-tools` is also
+`.scheduler/QUESTIONS.md`'s consumed reply). `libchromaprint-tools` is also
 now installed (`fpcalc version 1.5.1`), clearing the last blocker noted
 below.
 
@@ -422,7 +422,7 @@ fail the rip itself.
 
 **Live-verification: partial, ongoing.** The M02 printed successfully at
 least once tonight (confirmed physically) but the BLE connection is
-unreliable - see `.claude/QUESTIONS.md`'s "Phomemo M02 BLE connection is
+unreliable - see `.scheduler/QUESTIONS.md`'s "Phomemo M02 BLE connection is
 unreliable" entry for the live debugging so far (untrusting the device
 didn't fix it; it can even interrupt an already-printing job mid-way).
 Needs a dedicated session with the printer in hand, not more firefighting

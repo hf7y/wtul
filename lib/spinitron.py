@@ -17,7 +17,7 @@ The matching/reorder half is pure and unit-tested. `rip_session()` in
 `bin/wtul-rip` calls `fetch_recent_spins_public()` then
 `reorder_queue(queue, matched_track_numbers(...))` right after the queue is
 built, mirroring apply_live_input's reorder. No API key exists or is needed
-for this path - see `.claude/QUESTIONS.md` (2026-07-20) for why: the station's
+for this path - see `.scheduler/QUESTIONS.md` (2026-07-20) for why: the station's
 `/api/spins` requires an API key issued by station management, which isn't
 available; spinitron.com/WTUL/ is a public page with no login that shows
 what's airing right now station-wide, which is enough to know what's

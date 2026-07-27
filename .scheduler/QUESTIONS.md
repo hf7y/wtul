@@ -14,7 +14,7 @@ yourself. Example:
 ```
 
 `/wtul-batch` step 0a reads this file first each run
-(`collect-feedback.sh .claude/QUESTIONS.md --consume`), treats any `> `
+(`collect-feedback.sh .scheduler/QUESTIONS.md --consume`), treats any `> `
 reply as authoritative, acts on it, then removes that question's whole
 entry (git history + that run's report keep the record) -- that's the
 only thing that should ever remove something from this file. To dismiss
@@ -22,10 +22,9 @@ a question without any action, you can still just delete its line by
 hand.
 
 - **2026-07-18 (wtul-batch):** Deferred, needs your decision before I build (a genuine either/or, not "should I"): (a) ROADMAP #2 metadata-fix API — AcoustID/Chromaprint (needs `fpcalc`, NOT installed here, + an AcoustID key) vs Discogs API (needs a Discogs token); pick one. **(a) RESOLVED 2026-07-24: Discogs, token already in hand — see FOCUS.md's stability milestone, which now lists #2/Discogs as a milestone criterion still needing build + live-verification.** (b) ROADMAP #8 catalog spreadsheet — where does the sheet live and its format/columns (Google Sheets + OAuth vs local .csv/.xlsx)? (c) ROADMAP #3 label printer — which printer model? (d) ROADMAP #4/#7 web-photo/OCR — need a phone + hosting decision. **(b)/(c)/(d) RECLASSIFIED 2026-07-24 (realisateur): (parked)** — all three sit past wtul's current stability milestone (rip-speed monitoring + Discogs metadata-fix only), already named in FOCUS.md's parked list; no longer presented as blocking decisions until the milestone is reached and a new one promotes them into the active set. #3/#4/#7 remain hardware-gated regardless.
-> (b) https://docs.google.com/spreadsheets/d/19QfbBhZpTJZYFuTkWuerD73z3AN_tGl3n8t5cq3dwKI/edit?gid=591596929#gid=591596929 . This is the Working Local Catalog which tracks albums: #	ARTIST	ALBUM	LABEL	YEAR	Rating	GENRE	MERIT	LOCAL	COMMENT	DATE	DJ NAME	HOME . Updates should include under DJ NAME "Guy" (my dj name) and DATE can be the date entered. (c) Phomemo m02 (d) phone is android but host on webapp via apps script preferably. https://script.google.com/u/0/home/projects/1ed2WEziF9LVxsAm_RdAXmh4y61GZevBSD8NRvZJn6x4UcE7sdPQDH9uE/edit existing HUD here could have a tabbed page design. 
 
 
-- **2026-07-22 (wtul-batch): wtul has no `.claude/FOCUS.md` -- deliberately not
+- **2026-07-22 (wtul-batch): wtul has no `.scheduler/FOCUS.md` -- deliberately not
   building one yet.** Flagged by scheduler's `scheduler status` (its
   "next up" parser needs a Current-focus/Priority/Backlog structure it
   can't find here) and picked up by realisateur
@@ -199,7 +198,7 @@ hand.
   `find_tesseract()` fallback already finds it correctly. Ran the real
   binary against a synthetic test cover image (no mocks) and got back
   real OCR'd candidate lines. Branch `ocr-metadata-extraction`'s full
-  suite re-verified clean (86/86). See `.claude/FOCUS.md`'s #7 section
+  suite re-verified clean (86/86). See `.scheduler/FOCUS.md`'s #7 section
   for the full update. Only remaining blocker for #7 is unchanged and
   still hardware-gated: a real disc's real cover photo, which needs #4's
   live phone-capture flow. No decision needed from you; this is a status
