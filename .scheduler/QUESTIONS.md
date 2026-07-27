@@ -21,10 +21,7 @@ only thing that should ever remove something from this file. To dismiss
 a question without any action, you can still just delete its line by
 hand.
 
-- **2026-07-18 (wtul-batch):** Deferred, needs your decision before I build (a genuine either/or, not "should I"): (a) ROADMAP #2 metadata-fix API — AcoustID/Chromaprint (needs `fpcalc`, NOT installed here, + an AcoustID key) vs Discogs API (needs a Discogs token); pick one. **(a) RESOLVED 2026-07-24: Discogs, token already in hand — see FOCUS.md's stability milestone, which now lists #2/Discogs as a milestone criterion still needing build + live-verification.** (b) ROADMAP #8 catalog spreadsheet — where does the sheet live and its format/columns (Google Sheets + OAuth vs local .csv/.xlsx)? (c) ROADMAP #3 label printer — which printer model? (d) ROADMAP #4/#7 web-photo/OCR — need a phone + hosting decision. **(b)/(c)/(d) RECLASSIFIED 2026-07-24 (realisateur): (parked)** — all three sit past wtul's current stability milestone (rip-speed monitoring + Discogs metadata-fix only), already named in FOCUS.md's parked list; no longer presented as blocking decisions until the milestone is reached and a new one promotes them into the active set. #3/#4/#7 remain hardware-gated regardless.
-
-
-- **2026-07-22 (wtul-batch): wtul has no `.scheduler/FOCUS.md` -- deliberately not
+- **2026-07-22 (wtul-batch): wtul has no `.claude/FOCUS.md` -- deliberately not
   building one yet.** Flagged by scheduler's `scheduler status` (its
   "next up" parser needs a Current-focus/Priority/Backlog structure it
   can't find here) and picked up by realisateur
@@ -519,3 +516,46 @@ hand.
   machine today (no drive attached) even for rehearsal use, so I did not guess
   - it changes the tool's behavior for you, not just its capability. Tell me
   which and it's a small change.
+- **2026-07-27 (wtul-batch, run 24):** your reply to the 2026-07-18
+  (b)/(c)/(d) entry is consumed and that entry is deleted per this file's
+  contract. What each answer became, so none of it is lost with it:
+  **(b)** the sheet URL you gave is the same one #8 has been writing to
+  since 2026-07-20, and its columns match what's recorded there - so the
+  only new instruction was attribution. Built: `DJ NAME` now goes on every
+  catalog row, defaulting to "Guy" (branch `catalog-dj-name`, see the next
+  entry). `DATE` was already the date entered. **(c)** Phomemo M02 -
+  matches the 2026-07-20 decision already in FOCUS.md #3; nothing changed,
+  the M02 work is built and waiting on a dedicated printer session, not on
+  this answer. **(d)** Android + host on Apps Script - recorded in FOCUS.md
+  #4/#10, along with the HUD project link you gave
+  (`script.google.com/.../1ed2WEziF9LVxsAm_RdAXmh4y61GZevBSD8NRvZJn6x4UcE7sdPQDH9uE`)
+  and the "tabbed page design" steer. That link is new information this
+  repo did not have: #4 was built against the *other* GAS project (the one
+  bound to the photo-capture sheet), and #10 had no host at all.
+- **2026-07-27 (wtul-batch, run 24): built, branch `catalog-dj-name`
+  (`b28240b`), NOT merged.** Adds the `DJ NAME` column to #8's catalog
+  write-back - every row written since 2026-07-20 has landed in the
+  rotation catalog unattributed. Default "Guy", override with
+  `WTUL_DJ_NAME`, an explicitly empty value writes no DJ NAME rather than
+  attributing someone else's rips to you. 4 new rehearsal tests, both
+  mutations caught, 322/322. **Still needs hands-on verification**, though
+  a weak form: the key match is live-verified (the deployed endpoint's
+  `?scope=schema` reports the header as exactly `DJ NAME`, read-only GET,
+  nothing written), but only a complete rip of a real disc actually puts a
+  row in the sheet. Check the LOCAL tab's DJ NAME column after the next
+  real rip.
+- **2026-07-27 (wtul-batch, run 24): a judgment call I did not make for
+  you - should the catalog row carry GENRE/YEAR/LABEL too?** The sheet has
+  those columns and this repo already has the lookup that fills them
+  (`discogs_genre_year()`, built for the mix label in #3), so it is a small
+  change. I did not build it: you asked for DJ NAME and DATE specifically,
+  and a Discogs genre guess written into the station's rotation catalog is
+  harder to walk back than a blank cell - there is still no delete
+  endpoint. Say the word and it ships next run.
+- **2026-07-27 (wtul-batch, run 24): FYI, no action needed - wtul's
+  FOCUS.md/QUESTIONS.md moved from `.claude/` to `.scheduler/`** (this
+  file's new home; wtul `9539e30`, scheduler `07a9bbf`). That is the
+  migration that had been sitting in scheduler's `BLOCKERS.md` since
+  2026-07-24. Full record, including a correction to the belief that an
+  unattended run could not do it, is appended under `## wtul` there
+  (scheduler `33ca45f`).

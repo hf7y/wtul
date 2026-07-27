@@ -262,6 +262,34 @@ and offer to move/retag the wrong music. 4 regression tests,
 mutation-checked. Milestone criteria otherwise unchanged - both still
 gated on a real rip.
 
+**Update (2026-07-27, run 24): this file moved.** wtul's FOCUS.md and
+QUESTIONS.md now live at `.scheduler/`, not `.claude/` (wtul `9539e30`,
+scheduler `07a9bbf` adding `SCHEDULER_SUBDIR=".scheduler"`, scheduler
+`33ca45f` recording it under BLOCKERS.md's `## wtul`). This is the
+migration decided 2026-07-24, re-scouted 2026-07-25, and queued
+2026-07-26 as the first project in realisateur's ecosystem-wide pass —
+it had sat unexecuted for three days because it was filed only in
+BLOCKERS.md, which is by standing rule not a work queue (realisateur
+BUILD-DISCIPLINE failure pattern 13). Two things worth carrying forward:
+the belief that an unattended run *structurally could not* do it was
+wrong — the harness gate is on editing `.claude/*.md` in place, and a
+`git mv` followed by edits at the new path never touches it — and the
+part that actually bit was outside this repo: `~/.local/bin/
+wtul-batch-loop.sh` carries its own copy of the batch prompt and is what
+really runs (`BATCH_SCRIPT` is still authoritative), so the conf's
+`BATCH_PROMPT` alone would have fixed nothing. Both were edited and then
+diffed byte-identical. That prompt had told six consecutive runs (18–23)
+"Read ROADMAP.md FIRST … there is no separate tracker or FOCUS.md for
+this project"; it now points here.
+
+**Update (2026-07-27, run 24): `DJ NAME` on catalog rows, branch
+`catalog-dj-name` (`b28240b`), not merged.** Your reply to the long-open
+2026-07-18 (b)/(c)/(d) question landed this run (see QUESTIONS.md's run-24
+entries for what each part became). (b) was the only one that turned into
+code: every row #8 has written since 2026-07-20 went into the rotation
+catalog unattributed. See #8 below. Milestone criteria unchanged — both
+are still gated on a real rip, and no rip has happened.
+
 *(Milestone drafted 2026-07-24 via realisateur's `/ideate` — revise if
 it doesn't fit wtul's own read of its bar.)*
 
@@ -404,6 +432,13 @@ Needs before starting:
 
 ### 3. Label printer integration - seamless tagging
 
+**Re-confirmed 2026-07-27 (run 24):** Zach's reply to the 2026-07-18 (c)
+question named the Phomemo M02 — same as the 2026-07-20 decision below,
+so nothing here changed. Worth stating plainly since that question was
+open for nine days: **#3 was never blocked on which printer.** What it
+is blocked on is the unreliable BLE connection, which needs a dedicated
+session with the printer in hand (see QUESTIONS.md).
+
 **Decision (2026-07-20): Phomemo M02** (BLE thermal receipt/label printer).
 **Status (2026-07-24): built and wired, branch `label-printer-integration`,
 rebased onto `main` twice same day to pick up the live-test fixes and the
@@ -441,6 +476,24 @@ Idea: once a disc finishes ripping, automatically print a physical label
 `fix <discid>` lookups later) for the CD/case.
 
 ### 4. Web app + phone photo capture for album art
+
+**Update (2026-07-27, run 24): the phone and the host are both answered
+now, and one of the answers is new.** Zach's reply to the 2026-07-18
+(d) question: *"phone is android but host on webapp via apps script
+preferably"* — the Apps Script half matches the 2026-07-20 decision
+below, and Android rules out anything iOS-specific (nothing built
+assumes either, so no code changed). The genuinely new part is **which**
+Apps Script project he pointed at:
+`https://script.google.com/u/0/home/projects/1ed2WEziF9LVxsAm_RdAXmh4y61GZevBSD8NRvZJn6x4UcE7sdPQDH9uE/edit`
+— *"existing HUD here could have a tabbed page design."* That is not the
+project this branch was built against (it targets the GAS project bound
+to the photo-capture sheet linked below). Before any further hosting
+work on #4 or #10: read that HUD project's source and decide whether the
+photo-capture page and #10's sweeper-prime page become **tabs in the
+existing HUD** rather than two more standalone `/exec` endpoints. Not
+acted on this run — it is a hosting-architecture call that touches both
+items, and reading a GAS project's source needs the browser, not this
+machine.
 
 **Decision (2026-07-20): host in Google Apps Script**, reusing the
 existing GAS project already backing
@@ -599,6 +652,29 @@ Needs before starting:
 
 ### 8. Auto-update the local music catalog spreadsheet
 
+**Update (2026-07-27, run 24): rows are attributed now — branch
+`catalog-dj-name` (`b28240b`), not merged.** Zach's answer to the
+2026-07-18 question confirmed the sheet URL and columns below verbatim
+(so nothing about the schema changed) and added one instruction this
+repo did not have: *"Updates should include under DJ NAME 'Guy' (my dj
+name) and DATE can be the date entered."* `DATE` was already the entry
+date. `DJ NAME` was not being sent at all, so every row written since
+2026-07-20 landed unattributed in a sheet whose point is knowing who
+logged what. `CATALOG_DJ_NAME` (default `"Guy"`, override
+`WTUL_DJ_NAME`, an explicitly empty value omits the column rather than
+attributing a second DJ's rips to Guy) now rides along on the POST.
+The dict key is `"DJ NAME"` with the space: the GAS endpoint matches
+keys to headers case-insensitively and whitespace-*trimmed*, not
+whitespace-collapsed, so `DJNAME` would have been silently dropped into
+a blank cell with no error — pinned by a test, and the live deployed
+endpoint's `?scope=schema` (a read-only GET, nothing written) confirms
+the header reads exactly `DJ NAME`. Only a complete rip of a real disc
+actually writes a row, so the sheet itself is still the witness.
+**Deliberately not built**: GENRE/YEAR/LABEL, which the sheet also has
+and `discogs_genre_year()` could fill — a Discogs guess in the station's
+live catalog is harder to walk back than a blank cell, and there is
+still no delete endpoint. Asked as a question instead.
+
 **Status (2026-07-20): done and live-verified.** The sheet is
 [here](https://docs.google.com/spreadsheets/d/19QfbBhZpTJZYFuTkWuerD73z3AN_tGl3n8t5cq3dwKI/edit?gid=591596929#gid=591596929)
 (Google Sheets - different sheet than #4's photo-capture one) - real
@@ -715,8 +791,13 @@ Still needs, before `/wtul-batch` builds anything real:
   something else (e.g. a media player) can pick it up? Changes the whole
   shape of "load to cache."
 - Where this runs during the show - same machine as `wtul-rip`, or a
-  separate browser tab/device someone's actually watching live? No
-  hosting/deployment decision made yet.
+  separate browser tab/device someone's actually watching live?
+  **Partly answered 2026-07-27 (run 24):** the hosting half now has a
+  candidate — the existing HUD Apps Script project Zach named in his
+  reply to #4's question ("existing HUD here could have a tabbed page
+  design"), which would make this a tab rather than a new deployment.
+  See #4's 2026-07-27 update for the link. Still undecided: which device
+  is actually watching it during the show.
 - This is new surface area (a web app + Google Sheets read access), not a
   wtul-rip change - likely its own script/directory rather than bolted
   onto `bin/wtul-rip`.
