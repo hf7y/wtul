@@ -18,6 +18,7 @@ import importlib.util
 import json
 import os
 import sys
+import time
 from importlib.machinery import SourceFileLoader
 
 import pytest
@@ -444,6 +445,63 @@ def test_catalog_writeback_fires_only_on_a_complete_disc(monkeypatch, tmp_path):
     assert len(calls2) == 1
     assert calls2[0]["ARTIST"] == "Belong"
     assert calls2[0]["LOCAL"] is True
+
+
+# -- the sheet's DJ NAME / DATE columns (QUESTIONS.md reply, 2026-07-27) --
+#
+# "Updates should include under DJ NAME 'Guy' (my dj name) and DATE can be
+# the date entered." DATE was already the entry date; DJ NAME was missing
+# entirely, so every row #8 has ever written landed unattributed.
+
+
+def _rehearse_catalog_row(monkeypatch, tmp_path, dj_name=None):
+    """Run one complete rehearsed disc with the catalog write-back opted in
+    and `write_row` injected, and return the row it would have POSTed.
+
+    WTUL_DJ_NAME is read at module load, so it is set (or explicitly
+    cleared) here, before exec_module - and always one of the two, so a
+    real WTUL_DJ_NAME in the runner's own environment can never decide
+    what these tests assert.
+    """
+    if dj_name is None:
+        monkeypatch.delenv("WTUL_DJ_NAME", raising=False)
+    else:
+        monkeypatch.setenv("WTUL_DJ_NAME", dj_name)
+    monkeypatch.setenv("WTUL_SIMULATE_ALLOW_CATALOG", "1")
+    mod = _load_rehearsal(monkeypatch, tmp_path, _write_spec(tmp_path))
+    mod.CATALOG_WRITEBACK_URL = "https://example.invalid/exec"
+    calls = []
+    monkeypatch.setattr(mod.catalog_writeback, "write_row",
+                        lambda url, row: calls.append(row) or True)
+    assert mod.rip_session(mod.DEV) is True
+    assert len(calls) == 1
+    return calls[0]
+
+
+def test_catalog_row_carries_the_dj_name(monkeypatch, tmp_path):
+    row = _rehearse_catalog_row(monkeypatch, tmp_path)
+    # The key must read exactly as the sheet's header does: the GAS endpoint
+    # matches keys to headers case-insensitively but does not collapse the
+    # internal space, so "DJNAME"/"DJ_NAME" would be silently ignored.
+    assert row["DJ NAME"] == "Guy"
+
+
+def test_catalog_row_dj_name_is_overridable(monkeypatch, tmp_path):
+    row = _rehearse_catalog_row(monkeypatch, tmp_path, dj_name="Someone Else")
+    assert row["DJ NAME"] == "Someone Else"
+
+
+def test_catalog_row_omits_dj_name_when_blanked(monkeypatch, tmp_path):
+    """An explicitly empty WTUL_DJ_NAME writes no DJ NAME rather than
+    falling back to the default - otherwise a second DJ could only opt out
+    by attributing their rips to Guy."""
+    row = _rehearse_catalog_row(monkeypatch, tmp_path, dj_name="   ")
+    assert "DJ NAME" not in row
+
+
+def test_catalog_row_date_is_the_date_entered(monkeypatch, tmp_path):
+    row = _rehearse_catalog_row(monkeypatch, tmp_path)
+    assert row["DATE"] == time.strftime("%Y-%m-%d")
 
 
 # -- `fix <discid>` on a rehearsed unidentified disc ---------------------
