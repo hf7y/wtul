@@ -806,3 +806,24 @@ hand.
     its original open question. **No decision needed from you** beyond
     what's already flagged inline in older entries — this is a status
     note, not a new blocker.
+- **2026-07-27 (wtul-batch, run 31): built `catalog-schema-drift`** —
+  `doctor` now catches the one #8 failure mode that has no symptom at rip
+  time. The GAS endpoint drops an unmatched key instead of erroring, and
+  its POST response can't be trusted, so a column renamed in the sheet
+  writes that value into nothing and the row still lands; you'd find out
+  weeks later reading the sheet. It now GETs `?scope=schema` (read-only)
+  and compares the live headers to the keys a rip sends, WARNing if any
+  are missing. `build_row` is the single definition of that row now, so
+  the writer and the checker can't disagree. **No hands-on hardware
+  verification needed** — no drive, no disc — and unusually for this
+  project it *was* verified for real rather than only mocked: run against
+  the live sheet, it reports all 5 columns present. 18 new tests (452
+  total), 5 mutations caught.
+- **2026-07-27 (wtul-batch, run 31): one judgement call worth your eye.**
+  The new check is WARN, never FAIL, so a drifted or unreachable sheet
+  will not stop a rip on show night — the reasoning being that a blank
+  column is cheaper than a blocked rip, and this endpoint is exactly the
+  kind of thing that goes unreachable at the wrong moment. The cost is
+  that a real drift shows up as one WARN line among others in a preflight
+  someone may skim. Say so if you'd rather a missing column were loud
+  enough to stop and make you look.

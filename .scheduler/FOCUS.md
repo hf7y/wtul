@@ -838,6 +838,35 @@ Needs before starting:
 
 ### 8. Auto-update the local music catalog spreadsheet
 
+**Update (2026-07-27, run 31): a renamed sheet column can no longer eat a
+value silently — branch `catalog-schema-drift` (`7d86a8a`), not merged.**
+The GAS endpoint matches incoming keys to header text and *ignores* the
+ones that don't match: it doesn't error, and its POST response is
+documented-untrustworthy anyway, so nothing reads the `unmatchedKeys` it
+returns. A column renamed in the sheet therefore costs a value with **no
+symptom at rip time** — the row still appends, that cell is just blank,
+and nobody finds out until someone reads the sheet weeks later. Run 24
+caught exactly this class of bug by hand (`DJNAME` would have vanished
+against the header `DJ NAME`, because the endpoint trims and case-folds
+but does *not* collapse whitespace); this makes it a check instead of a
+near miss found by reading. `doctor` now GETs `?scope=schema` (read-only,
+appends nothing, so no rehearsal guard is needed) and compares the live
+headers against the keys a rip actually sends. Two supporting changes
+matter more than the check itself: `catalog_writeback.normalize_header`
+mirrors the endpoint's own matching rule in one place rather than
+restating it as a rule, and `build_row` is now the single definition of
+the row — `bin/wtul-rip` writes it and `doctor` reads its keys, so the
+column names cannot drift between the writer and the checker. WARN, never
+FAIL, and honours `--no-net`: a rip still succeeds with a blank column,
+and a preflight that blocked show night over an unreachable sheet would
+be worse than the drift. 18 new tests (452 total), 5 mutations all
+caught. **No hands-on hardware verification needed** — no drive, no disc.
+Verified against the real live endpoint, not just mocks: `doctor` reports
+`all 5 rip columns present in the sheet (ARTIST, ALBUM, DATE, LOCAL, DJ
+NAME)`. Note this closes the *detection* half only — the outbox retry
+path is still never-exercised-against-the-real-sheet, per the run-25
+note below.
+
 **Update (2026-07-27, run 25): a failed row is queued, not lost — branch
 `catalog-outbox`, not merged.** `write_row()` already knew
 the difference between "the POST landed" and "the POST's response lied"
