@@ -94,17 +94,34 @@ For anything not gated on physical hardware: look for edge cases, empty
 states, malformed input, what a first pass typically misses. Fix what
 breaks; note what's genuinely out of scope for this round.
 
-## 5. Flag what you built, and anything needing the user's own judgment
+## 5. Route what you produced -- questions to QUESTIONS.md, everything else elsewhere
 
-Append-only in `.scheduler/QUESTIONS.md`, format
-`- **YYYY-MM-DD (wtul-batch):** <text>`:
+**`.scheduler/QUESTIONS.md` takes ONE kind of entry: a decision you could
+not make without Zach.** A real tradeoff, a vendor/hardware choice, an
+ambiguous direction. Not "should I build this" -- default yes, per
+FOCUS.md.
 
-- Every feature/distinct new idea built this round - which branch, what
-  it does, in one or two lines, and **explicitly whether it still needs
-  hands-on hardware verification** before being trusted.
-- A genuine judgment call needing the user's own decision (not "should I
-  build this" - default yes, per FOCUS.md - but a real tradeoff or
-  ambiguous direction).
+That file drains only when Zach writes a `> ` reply, so anything you put
+there that isn't a question stays forever. Between 2026-07-24 and
+2026-07-27, 31 runs piled 51 entries in; about 6 were questions. Do not
+add to that.
+
+Everything else has a home that is NOT this file:
+
+| What you have | Where it goes |
+|---|---|
+| A feature/branch you built this round | the report (step 6) -- branch, what it does, and **explicitly whether it still needs hands-on hardware verification** |
+| An idea you deliberately parked, or hardware you'd need bought | `.scheduler/FOCUS.md` backlog |
+| "FYI, no action needed" / status / branch health | the report only |
+| Confirmation that a prior question got answered | delete that question's entry per step 0a; the report records it |
+
+Before appending, ask: *does this end with something Zach must choose
+between?* If it doesn't, it isn't a question -- put it in its column
+above. If you find yourself writing "FYI" or "no action needed" into
+QUESTIONS.md, that's the signal you're in the wrong file.
+
+Format, when it genuinely is one: `- **YYYY-MM-DD (wtul-batch):** <text>`,
+append-only, ending in the actual choice you need made.
 
 ## 6. Write the report
 
