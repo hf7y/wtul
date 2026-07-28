@@ -1071,3 +1071,33 @@ Still needs, before `/wtul-batch` builds anything real:
     have pointed the next reader, and the next batch run, at the empty
     file. Struck through rather than deleted so a future run doesn't
     re-derive the same suggestion from a clean slate and act on it.
+
+## Ideas (added via `scheduler -i`)
+
+- **2026-07-28 08:26 (via `scheduler -i`):** Undeclared shared-host footprint on mandark from the Phomemo M02 work (~2026-07-05), found by senechal 2026-07-28 while diagnosing an unrelated Bluetooth mouse fault.
+
+Three pieces of machine-wide config exist that senechal was never told about:
+  1. /usr/lib/cups/backend/phomemo -> symlink, root-owned, pointing INTO
+     /home/zach/.local/share/phomemo-tools/cups/backend/phomemo.py
+  2. /usr/lib/cups/backend/phomemo.rfcomm-backup (the displaced original)
+  3. CUPS print queue 'M02', device phomemo://EAF3B6A27033
+
+Per the ecosystem rule, the project that generates machine config OWNS it and
+senechal owns KNOWING it exists -- 'notify-senechal' should have been run when
+these landed. Please run it now for the three items above so the estate
+registry is accurate, or tell senechal if wtul does not in fact own them.
+
+Two substantive notes, not just bookkeeping:
+
+- A root-owned CUPS backend that is a symlink into a user-writable home
+  directory means anything able to write ~/.local/share/phomemo-tools/ can
+  execute code as the CUPS backend user. Worth wtul deciding whether the
+  file should be COPIED to /usr/lib/cups/backend/ instead of symlinked.
+  senechal is not fixing this -- printing is wtul's domain.
+
+- The M02 is NOT misbehaving. senechal initially suspected wtul had disabled
+  Bluetooth autoconnect while troubleshooting the printer; that is wrong and
+  is retracted. /etc/bluetooth/ has not been modified since 2024. The M02
+  reconnects because CUPS dials OUT to it on demand, which is correct
+  behaviour and was in fact the evidence that identified the mouse fault.
+  No action needed on the printer's connectivity.
