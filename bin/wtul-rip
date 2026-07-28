@@ -1153,17 +1153,14 @@ def rip_session(dev):
             print("Catalog: write-back SUPPRESSED (rehearsal) - a simulated "
                   "disc must never enter the real rotation catalog.")
         elif CATALOG_WRITEBACK_URL:
-            row = {
-                "ARTIST": artist.strip(),
-                "ALBUM": album.strip(),
-                "DATE": time.strftime("%Y-%m-%d"),
-                "LOCAL": True,
-            }
-            # DJ NAME is the sheet's own column header, space and all - the
-            # GAS endpoint matches incoming keys to headers by name, so the
-            # key has to read exactly as the header does.
-            if CATALOG_DJ_NAME:
-                row["DJ NAME"] = CATALOG_DJ_NAME
+            # The column names live in catalog_writeback.build_row, not
+            # here - `doctor`'s schema check reads the same function to
+            # know what to validate against the sheet's real headers, and
+            # a key that only matches in one of the two places is exactly
+            # the silent-blank-cell bug that check exists to catch.
+            row = catalog_writeback.build_row(
+                artist, album, time.strftime("%Y-%m-%d"),
+                dj_name=CATALOG_DJ_NAME)
             confirmed = catalog_writeback.write_row(CATALOG_WRITEBACK_URL, row)
             if confirmed:
                 print("Catalog: logged to sheet.")
@@ -1525,6 +1522,14 @@ def doctor_context(check_net=True):
         stale_tempdir_secs=STALE_TEMPDIR_SECS,
         lock_is_stale=_lock_is_stale,
         outbox_pending=lambda: catalog_outbox.load(CATALOG_OUTBOX_FILE),
+        # Read-only (`?scope=schema` appends nothing), so this is safe in
+        # a preflight and needs no rehearsal guard - unlike the POST in
+        # rip_session. The row keys come from the same build_row a real
+        # rip uses, with a placeholder payload: only the keys are read.
+        catalog_schema=lambda: catalog_writeback.fetch_schema(
+            CATALOG_WRITEBACK_URL),
+        catalog_row_keys=lambda: catalog_writeback.build_row(
+            "", "", "", dj_name=CATALOG_DJ_NAME).keys(),
     )
 
 

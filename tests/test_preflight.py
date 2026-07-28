@@ -45,6 +45,15 @@ def make_ctx(**over):
         import_ok=lambda m: True,
         lock_is_stale=lambda p: True,
         outbox_pending=lambda: [],
+        # CATALOG_WRITEBACK_URL is one of CREDENTIALS, so `environ` above
+        # already sets it and the schema check runs in the baseline - via
+        # these injected callables, never a real fetch. The headers are
+        # the live sheet's real LOCAL-tab schema (FOCUS.md #8).
+        catalog_schema=lambda: ["#", "ARTIST", "ALBUM", "LABEL", "YEAR",
+                                "Rating", "GENRE", "MERIT", "LOCAL",
+                                "COMMENT", "DATE", "DJ NAME", "HOME"],
+        catalog_row_keys=lambda: ["ARTIST", "ALBUM", "DATE", "LOCAL",
+                                  "DJ NAME"],
     )
     base.update(over)
     return preflight.Context(**base)
@@ -313,3 +322,77 @@ def test_unwired_outbox_says_so_rather_than_claiming_empty():
                                  checks=[preflight.check_catalog_outbox])[0]
     assert check.status == preflight.WARN
     assert "not wired" in check.detail
+
+
+# --- catalog schema drift (#8) ----------------------------------------
+#
+# The failure this guards is silent by construction: the GAS endpoint
+# ignores an unmatched key instead of erroring, and its POST response is
+# documented-untrustworthy, so a renamed column costs a value with no
+# symptom at rip time. These tests are the witness that `doctor` sees it.
+
+def _catalog_env(**extra):
+    env = {var: "set" for var, _ in preflight.CREDENTIALS}
+    env["CATALOG_WRITEBACK_URL"] = "https://script.google.com/x/exec"
+    env.update(extra)
+    return env
+
+
+def test_catalog_schema_skipped_when_writeback_is_off():
+    # No URL means no write-back at all - an absent column can't cost
+    # anything, so this must not nag.
+    env = _catalog_env()
+    del env["CATALOG_WRITEBACK_URL"]
+    ctx = make_ctx(environ=env, catalog_schema=lambda: (_ for _ in ()).throw(
+        AssertionError("must not touch the network when the URL is unset")))
+    assert by_name(preflight.run_checks(ctx), "catalog schema").status == preflight.OK
+
+
+def test_catalog_schema_all_columns_present_is_ok():
+    ctx = make_ctx(environ=_catalog_env())
+    check = by_name(preflight.run_checks(ctx), "catalog schema")
+    assert check.status == preflight.OK
+    assert "DJ NAME" in check.detail
+
+
+def test_catalog_schema_renamed_column_warns_and_names_it():
+    # Somebody retitles "DJ NAME" to "DJ" in the sheet. Every rip since
+    # then has written its attribution into nothing.
+    headers = ["#", "ARTIST", "ALBUM", "DATE", "LOCAL", "DJ"]
+    ctx = make_ctx(environ=_catalog_env(), catalog_schema=lambda: headers)
+    check = by_name(preflight.run_checks(ctx), "catalog schema")
+    assert check.status == preflight.WARN
+    assert "DJ NAME" in check.detail
+    # ...and doesn't drag the whole preflight to NOT READY over it.
+    assert preflight.worst_status(preflight.run_checks(ctx)) == preflight.WARN
+
+
+def test_catalog_schema_unreadable_warns_rather_than_claiming_clean():
+    ctx = make_ctx(environ=_catalog_env(), catalog_schema=lambda: None)
+    check = by_name(preflight.run_checks(ctx), "catalog schema")
+    assert check.status == preflight.WARN
+    assert "unreadable" in check.detail
+
+
+def test_catalog_schema_honours_no_net():
+    ctx = make_ctx(environ=_catalog_env(), check_net=False,
+                   catalog_schema=lambda: (_ for _ in ()).throw(
+                       AssertionError("--no-net must not fetch")))
+    assert by_name(preflight.run_checks(ctx), "catalog schema").status == preflight.OK
+
+
+def test_catalog_schema_unwired_says_so_instead_of_passing():
+    ctx = make_ctx(environ=_catalog_env(), catalog_schema=None,
+                   catalog_row_keys=None)
+    check = by_name(preflight.run_checks(ctx), "catalog schema")
+    assert check.status == preflight.WARN
+    assert "not wired" in check.detail
+
+
+def test_catalog_schema_empty_header_row_reports_every_column():
+    # The endpoint refuses a POST outright when it detects no header row,
+    # so "nothing matches" is the truthful report, not a false all-clear.
+    ctx = make_ctx(environ=_catalog_env(), catalog_schema=lambda: [])
+    check = by_name(preflight.run_checks(ctx), "catalog schema")
+    assert check.status == preflight.WARN
+    assert "ARTIST" in check.detail and "ALBUM" in check.detail

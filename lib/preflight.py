@@ -94,7 +94,8 @@ class Context:
                  which=None, run=None, fetch=None, free_kb=None,
                  exists=None, isdir=None, isfile=None, access=None,
                  glob_=None, mtime=None, now=None, import_ok=None,
-                 lock_is_stale=None, outbox_pending=None):
+                 lock_is_stale=None, outbox_pending=None,
+                 catalog_schema=None, catalog_row_keys=None):
         self.dev = dev
         self.home = home
         self.mixes_root = mixes_root
@@ -130,6 +131,14 @@ class Context:
         # didn't wire it, and the check reports that rather than claiming
         # an empty queue it never looked at.
         self.outbox_pending = outbox_pending
+        # Both injected by wtul-rip, which owns the endpoint URL and the
+        # row shape. `catalog_schema` is a zero-arg callable returning the
+        # live sheet's header list (or None if it couldn't be read);
+        # `catalog_row_keys` returns the keys a real rip would POST.
+        # None means the caller didn't wire it, and the check says so
+        # rather than claiming a schema it never fetched.
+        self.catalog_schema = catalog_schema
+        self.catalog_row_keys = catalog_row_keys
 
 
 def _default_import_ok(module):
@@ -381,6 +390,66 @@ def check_catalog_outbox(ctx):
                   fix="run `wtul-rip catalog` to retry them")]
 
 
+def check_catalog_schema(ctx):
+    """Does the live sheet still have the columns a rip writes into?
+
+    The GAS endpoint matches incoming keys to header text and *ignores*
+    the ones that don't match - it doesn't error, and its POST response
+    can't be trusted anyway, so a renamed or retyped column doesn't fail
+    a rip. It just writes that value into nothing, and nobody finds out
+    until someone reads the sheet weeks later. Run 24 caught exactly this
+    class of bug by hand (`DJNAME` would have vanished against the header
+    `DJ NAME`); this is the same reasoning as `check_outputdir_matches_
+    ripdir` - a repo-side agreement about a name is not deployed until
+    something checks the deployed copy.
+
+    Network, so it honours --no-net. WARN, never FAIL: a rip still
+    succeeds with a blank column, and a preflight that blocks show night
+    over an unreachable sheet would be worse than the drift.
+    """
+    if not ctx.environ.get("CATALOG_WRITEBACK_URL", "").strip():
+        return [Check("catalog schema", OK,
+                      "skipped - CATALOG_WRITEBACK_URL unset, no write-back")]
+    if ctx.catalog_schema is None or ctx.catalog_row_keys is None:
+        return [Check("catalog schema", WARN,
+                      "not wired - can't tell whether the sheet still has "
+                      "the columns a rip writes into")]
+    if not ctx.check_net:
+        return [Check("catalog schema", OK, "skipped (--no-net)")]
+
+    headers = ctx.catalog_schema()
+    if headers is None:
+        return [Check("catalog schema", WARN,
+                      "sheet headers unreadable - can't confirm a rip's "
+                      "columns still exist (rips still work; a renamed "
+                      "column would write blank)",
+                      fix="check the /exec URL by hand: "
+                          "<CATALOG_WRITEBACK_URL>?scope=debug")]
+    keys = list(ctx.catalog_row_keys())
+    missing = catalog_writeback_unmatched(headers, keys)
+    if not missing:
+        shown = ", ".join(keys)
+        return [Check("catalog schema", OK,
+                      f"all {len(keys)} rip columns present in the sheet "
+                      f"({shown})")]
+    return [Check("catalog schema", WARN,
+                  f"{len(missing)} column(s) a rip writes are not in the "
+                  f"sheet's header row: {', '.join(missing)} - those values "
+                  "will be dropped silently, the row still lands",
+                  fix="rename the sheet column back, or update "
+                      "catalog_writeback.build_row to match; "
+                      "<CATALOG_WRITEBACK_URL>?scope=debug shows the "
+                      "headers actually detected")]
+
+
+def catalog_writeback_unmatched(headers, keys):
+    """Indirection so preflight stays importable without lib/ on the path
+    (its whole test suite constructs a Context directly). Imported lazily
+    rather than at module scope for the same reason."""
+    import catalog_writeback
+    return catalog_writeback.unmatched_keys(headers, keys)
+
+
 CHECKS = [
     check_binaries,
     check_mutagen,
@@ -392,6 +461,7 @@ CHECKS = [
     check_lock,
     check_stale_tempdirs,
     check_catalog_outbox,
+    check_catalog_schema,
     check_credentials,
     check_network,
 ]
