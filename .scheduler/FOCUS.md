@@ -1101,3 +1101,75 @@ Two substantive notes, not just bookkeeping:
   reconnects because CUPS dials OUT to it on demand, which is correct
   behaviour and was in fact the evidence that identified the mouse fault.
   No action needed on the printer's connectivity.
+
+## Backlog: retire the QUESTIONS.md pile to bibliothecaire (filed 2026-07-28, Zach-agreed, NOT built)
+
+**Not started. This is the third of three fixes to the question-backlog
+problem; the other two landed 2026-07-28 and are described below so this
+item is not re-derived from scratch.**
+
+### What already happened (do not redo)
+
+1. **Rate.** wtul's paced weight went 2 -> 1 (scheduler `68432cf`). This
+   project was being dispatched ~6x/day against a 2/week design intent --
+   31 runs 07-24..07-27, twice re-firing within 2 seconds. `wtul.conf`'s
+   `BATCH_CRON="14 3 * * 3,6"` is INERT: there is no wtul crontab line,
+   the paced rotation is the real dispatcher. That lie is still standing;
+   fixing it means dropping `BATCH_SCRIPT` and running
+   `sync-crontab.sh --apply`, which flips the dispatch path too.
+2. **Inlet.** `.claude/commands/wtul-batch.md` step 5 no longer tells a
+   run to append every build to QUESTIONS.md (`5a92fb5`). That file now
+   takes exactly one thing: a decision that cannot be made without Zach.
+   Builds go to the report, parked ideas to this backlog, FYI nowhere.
+3. **Outlet.** `collect-feedback.sh --consume` no longer destroys a reply
+   as a side effect of reading it (scheduler `3170b81`); it marks `>>`.
+   A `> ` reply drift-linter now runs when a human quits the editor from
+   the scheduler front door (scheduler `6c95fab`).
+
+### What is left, and the trap in it
+
+`.scheduler/QUESTIONS.md` still holds ~51 entries of which roughly 6 are
+questions. The rest is build announcements already duplicated in
+`~/reports/wtul/`, "FYI, no action needed" status, and parked
+hardware/vision items belonging in this backlog.
+
+**Do NOT bulk-archive it.** 28 of those entries carry Zach's replies,
+restored 2026-07-28 (`cbe597d`) after run 28 consumed them without acting.
+They are answers to open questions, not retired prose, and several are
+specs rather than philosophy:
+
+- wtul's own stream as the audio input for on-air detection:
+  `http://129.81.255.83:8000/stream.m3u` — the exact thing the
+  on-air-detection entry called undesigned
+- "Combine Both = verdict" on the two-way earcon/fingerprint choice
+- three Sheets/Apps Script URLs followed by "build it" (#10 show-run sheet)
+- "3.5 ts cables on their way ahead of Friday's show" — the parked CD-500
+  hardware question, resolved by purchase
+- "yes we need to disable. this is properly delegated to senechal (a)" —
+  the M02 BLE auto-reconnect
+
+So the order is: **act on the 28 first, close what they close, and only
+then hand over what is genuinely spent.**
+
+### How the handover works
+
+bibliothecaire's receiving door is live (built 2026-07-28; scheduler's
+BLOCKERS.md was the first drop). The contract in its `intake/README.md`
+is explicit that **producers commit a drop IN** — bibliothecaire never
+reaches into another project's live files, and exports no ingest command,
+because that would make its code a runtime dependency of every project.
+
+So wtul writes:
+
+    <bibliothecaire>/intake/wtul-questions-retired-<YYYY-MM-DD>/
+      README.md        what this is, why it left, who to ask  (REQUIRED)
+      <records>.md     the retired entries
+
+and commits it. bibliothecaire's next nightly files it to
+`archive/wtul/<date>-questions-retired.md`, adds an `archive/INDEX.md`
+line, and removes the drop directory in the same commit. Run
+`check-project-busy bibliothecaire` before writing.
+
+Done when: QUESTIONS.md holds only open questions; every removed entry is
+either acted-on-and-closed or present in bibliothecaire's archive; and no
+entry carrying an unacted reply was archived.
