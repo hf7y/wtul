@@ -877,3 +877,24 @@ questions, invisible to every later run. Fixed 2026-07-28 in scheduler
   that a real drift shows up as one WARN line among others in a preflight
   someone may skim. Say so if you'd rather a missing column were loud
   enough to stop and make you look.
+
+- **2026-07-28 (interactive `/cloture`): decision — fix wtul's cadence lie,
+  or leave the paced rotation as the real dispatcher?** `schedule/wtul.conf`
+  declares `BATCH_CRON="14 3 * * 3,6"` with the comment "confirmed with Zach
+  — Wednesday and Saturday, early AM." That line is **inert**: `crontab -l`
+  has no wtul entry, and `_paced.conf` is what actually dispatches this
+  project. Today's weight cut (2 → 1, scheduler `68432cf`) slows it down but
+  does not make the file honest — a future reader still finds a cadence
+  stated in one place and enforced nowhere. Two ways to close it, and this
+  is your call because they differ in kind, not just in rate:
+  **(a) Make the conf true.** Drop `BATCH_SCRIPT` from `wtul.conf` and run
+  `sync-crontab.sh --apply`, installing the real Wed+Sat cron line. wtul then
+  runs on a fixed schedule matching the weekly show, and leaves the
+  usage-paced pool entirely — no more opportunistic runs when headroom
+  appears, including none in the run-up to a Friday show.
+  **(b) Make the paced rotation the stated truth.** Delete or comment out
+  `BATCH_CRON` so no file claims a schedule the system does not honor, and
+  let weight 1 in `_paced.conf` be the only cadence statement.
+  I did not pick: (a) changes the dispatch *mechanism*, not just how often
+  it fires, and that is a bigger change than "cut the rate" authorized.
+  > (answer inline here)
