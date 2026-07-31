@@ -1249,12 +1249,17 @@ now closed, and the scope grew a second, non-software half:
    independently of #10 and of the index question - it is not blocked on
    anything here.
 
-Inferred, not stated by Zach, and worth confirming rather than assuming:
-this reads like it is driven by the station-ID obligation (call sign +
-city of license, at the top of the hour), which would make the sweeper
-half the load-bearing part and the HUD text a convenience. If that is
-the actual driver, the sweeper work is the priority and should not wait
-on #10.
+**CONFIRMED by Zach 2026-07-31: yes, this is for the station ID
+requirement, and the sweepers are the priority.** So the item splits
+cleanly and the two halves should NOT be scheduled together:
+- **Sweeper recordings = priority, blocked on nothing.** Compliance
+  work. Record new sweepers saying "WTUL-FM New Orleans", upload to the
+  Drive location the run sheet's `sweeper N` rows point at, repoint
+  those rows. Does not touch this repo, does not wait on #10, does not
+  wait on the index question. Do this first.
+- **HUD index header + inline ID text = second, and still gated** on
+  the binder-index question above and on #10's HUD existing at all.
+  Convenience/QC, not compliance.
 
 ## Ideas (added via `scheduler -i`)
 
