@@ -898,3 +898,38 @@ questions, invisible to every later run. Fixed 2026-07-28 in scheduler
   I did not pick: (a) changes the dispatch *mechanism*, not just how often
   it fires, and that is a bigger change than "cut the rate" authorized.
   > (answer inline here)
+
+- **2026-07-31 (interactive `/cloture`): three questions from today's
+  filing session (#12, #13, #14 in FOCUS.md). None are urgent; all three
+  gate work that is otherwise ready to start.**
+  **(1) The PSA binder's index — does it have one?** #13 (`bfb6b2f`,
+  `85243f8`, `0253d4e`) wants the HUD to print an index in the PSA
+  header so it can be eyeballed against the binder. That only works if
+  the binder itself numbers or tabs its PSAs and the HUD can echo *that*
+  number. If the binder has no printed index, the run sheet's HHMM slot
+  is all there is to show, and it would not match the binder at all —
+  which means the QC gesture as described cannot be built. Everything
+  else about #13's HUD half is decided; this is the last blocker on it.
+  (The sweeper recordings are unaffected and are the priority — that
+  half is compliance work and blocked on nothing.)
+  > (answer inline here)
+
+  **(2) Does the studio console have a spare channel, and can it
+  generate mix-minus?** #12 (`7b5025d`, `62759b4`) — the Poly E220
+  research. Every option needs both, and the cheap USB-C dongle tap
+  needs them most (no hybrid null to cover a sloppy feed). Nothing
+  should be bought before this is answered; it is the only gate left
+  after you closed the POTS-hybrid route.
+  > (answer inline here)
+
+  **(3) The HUD now has three items pointing at it — build it once, on
+  purpose?** #10 (run-sheet UI, direction picked 2026-07-24), #13's PSA
+  index header, and #14's possible entry pivot (`ce24103`, `b49c48b`)
+  all name the same Apps Script HUD, which does not exist yet. That is
+  either a good argument that the HUD is worth designing once as a real
+  surface, or a warning that it is accumulating scope before anyone has
+  committed to building it. Worth one decision rather than three
+  independent ones. Note #14 specifically should NOT drive this — it is
+  downstream of #11 and #2, and if those land it may not need a HUD at
+  all.
+  > (answer inline here)
