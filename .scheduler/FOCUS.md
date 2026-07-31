@@ -1215,6 +1215,47 @@ left unstated and change the work:
 Do not start until at least the first two are answered; the rest can be
 inferred once the artifact is named.
 
+**Answered 2026-07-31 (same day, Zach).** Three of the four above are
+now closed, and the scope grew a second, non-software half:
+
+- **The printed book = the PSA binder at the station.** Physical, kept
+  on site. Not documented anywhere else; this line is now the only
+  record, so don't lose it.
+- **The output = the Apps Script HUD**, the one already named as #10's
+  hosting candidate in that item's 2026-07-27 update ("existing HUD here
+  could have a tabbed page design"). So this is a HUD change, not a
+  Sheets change and not a `wtul-rip` change - and it is **coupled to
+  #10**: same surface, so whoever builds either should look at both.
+  #10 remains unbuilt, which still gates this.
+- **STILL OPEN: which index.** The binder is now identified but its
+  *structure* is not - whether a PSA has a printed number/tab in the
+  binder that the HUD can echo, or whether the run sheet's HHMM slot is
+  all there is to show. The whole QC gesture (read header -> find it in
+  the binder) only works if the index shown is the binder's own. This is
+  the one question left before building.
+- **STILL OPEN: what "and other" covers** - unchanged, low stakes,
+  decidable while building.
+
+**New scope, not in the original request - two separate deliverables:**
+1. **HUD text (software).** The inline PSA display should also show the
+   station ID text **"WTUL-FM New Orleans"**. Cheap, part of the same
+   HUD change as the index header.
+2. **New sweeper audio (NOT software).** The post-PSA sweeper mp3 should
+   *say* "WTUL-FM New Orleans" - and per Zach, the existing sweepers
+   don't, so this **means producing new sweeper recordings**. That is a
+   studio/production task: record, name, upload to the Google Drive
+   location the run sheet's `sweeper N` rows point at, and update those
+   rows. No amount of HUD work substitutes for it, and it can proceed
+   independently of #10 and of the index question - it is not blocked on
+   anything here.
+
+Inferred, not stated by Zach, and worth confirming rather than assuming:
+this reads like it is driven by the station-ID obligation (call sign +
+city of license, at the top of the hour), which would make the sweeper
+half the load-bearing part and the HUD text a convenience. If that is
+the actual driver, the sweeper work is the priority and should not wait
+on #10.
+
 ## Ideas (added via `scheduler -i`)
 
 - **2026-07-22 14:58 (via `scheduler -i`): RESOLVED 2026-07-24
