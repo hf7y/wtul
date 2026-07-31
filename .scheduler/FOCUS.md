@@ -1261,6 +1261,49 @@ cleanly and the two halves should NOT be scheduled together:
   the binder-index question above and on #10's HUD existing at all.
   Convenience/QC, not compliance.
 
+### 14. Rip output and live track-name entry fight over the terminal - filed 2026-07-31, NOT built
+
+**Zach, 2026-07-31, filed for later - no work started.** The ripper's
+streaming output and the ability to type track names **conflict inside
+the CLI environment**. Two candidate directions named: **fix it in the
+CLI, or pivot to the HTML HUD.** Not decided.
+
+**This one is real and locatable, unlike a vague UX gripe** - the
+mechanism is visible in `bin/wtul-rip`. The live-input loop (~line 1076)
+does a zero-timeout `select.select([sys.stdin], ...)` between tracks and
+reads raw lines with `sys.stdin.readline()`, while the same terminal is
+being written to by per-track progress prints (`[n] Title ...` before
+the rip, `[n] Title ... OK/FAILED` after) from the same loop.
+`apply_live_input()` (line 446) is what parses `3=Real Track Title`,
+`q`/`!q`, `e`/`!e`. So the user is typing into a terminal that another
+part of the program is printing to, with no readline editing, no
+separated input line, and no control over echo - typed text gets
+interleaved with or scrolled away by progress output mid-entry. Track
+titles are exactly the case that hurts: they are long, they take time to
+type, and a rip finishing mid-word stomps the line.
+
+The two directions, neither costed:
+- **Fix in the CLI.** Separate the input line from the scrolling output
+  - a bottom-anchored prompt with the log scrolling above it. Means
+  curses, or a prompt-toolkit-style bottom bar, or at minimum termios
+  echo control plus redraw-after-print. Keeps the tool a single
+  terminal program with no new surface, but it is the kind of terminal
+  handling that is fiddly to get right and easy to break on resize,
+  Ctrl+C, and the existing `!`-prefixed immediate-kill paths.
+- **Pivot to the HTML HUD.** Move track-name entry into a browser form
+  where typing cannot be stomped by output at all, and let the CLI keep
+  streaming progress unmolested. Note this would be the **third** item
+  pointing at the same HUD surface (#10's run-sheet UI, #13's index
+  header, now this) - which is either an argument that the HUD is worth
+  building properly once, or a warning that it is accumulating scope
+  before it exists. Worth deciding as one question rather than three.
+
+Undecided and needed before either: does live entry have to stay
+possible *during* a rip, or would entering titles before/after the rip
+solve the actual pain? The whole conflict exists only because entry is
+concurrent with ripping. If concurrency is not load-bearing, the
+cheapest fix is neither of the two directions above.
+
 ## Ideas (added via `scheduler -i`)
 
 - **2026-07-22 14:58 (via `scheduler -i`): RESOLVED 2026-07-24
