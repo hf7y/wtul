@@ -1089,16 +1089,30 @@ studio rack** - treat every "the studio has X" as unverified. This is
 studio-hardware work, not a `wtul-rip` change; it shares this file only
 because this repo is where the show's tooling gets tracked.
 
+**Updated 2026-07-31 (same day) after Zach's reply.** Three changes,
+folded in below: (1) **there is no hybrid on a dead POTS line** - the
+third route is closed, see the gate list at the bottom; (2) **there is
+no POTS anywhere in this setup at all**, so the "make a POTS ripper"
+framing Zach floated has nothing to rip - the E220 is SIP end to end,
+packets from the wall jack to the handset, and no analog line exists to
+tap. What the analogy correctly asks for is the *shape*: a dumb inline
+box, always on, no software to babysit, clean feed out. That is Option
+A; (3) the USB-C port deserves more than the dead-end bullet it
+originally got - see Option C, newly added, which may be the $15 version
+of this whole item.
+
 **What the E220 is.** A pure SIP endpoint. Ports: RJ-9 handset jack, a
 *separate* RJ-9 headset jack, an EHS port (optional APP-51 adapter),
 USB-C 2.0, Bluetooth 5.0/NFC, 2x RJ-45. **No line out, no 3.5mm, no
 analog phone line.**
 
-Three approaches that get tried first and are all dead ends here:
+Approaches that get tried first and are dead ends here:
 - It **cannot** feed a POTS telephone hybrid (Telos/Gentner class) -
-  there is no analog line to hybrid.
-- It **cannot** be a USB soundcard - the USB-C port is host-side (it
-  drives a USB headset / storage), not a device port.
+  there is no analog line to hybrid. (And per Zach 2026-07-31, there is
+  no spare hybrid in the rack to try it with anyway.)
+- It **cannot** be a USB soundcard *for a computer* - the USB-C port is
+  host-side. **But host-side is not the same as useless** - it drives an
+  audio device, and that device's analog jacks are a tap. See Option C.
 - Bluetooth pairs a headset or a mobile *to* the phone; it does not
   expose a capturable A2DP source. Don't plan around it.
 
@@ -1129,19 +1143,37 @@ SIP call itself.
   call logging, recording the caller leg). Tradeoff: you own
   echo/mix-minus yourself instead of buying a DSP null, and it is one
   more box that has to not crash at 10am Friday.
+- **Option C - USB-C audio dongle as the tap (added 2026-07-31, ~$15,
+  TEST THIS FIRST).** The USB-C port drives a USB "headset". Plug in a
+  plain USB audio-class adapter instead: the phone treats it as a
+  headset, and the adapter's 3.5mm jacks are analog. Speaker-out -> board
+  channel, mix-minus -> its mic-in. Two real caveats: **Poly does not
+  document generic USB audio class support** anywhere - the datasheets
+  and headset-compatibility pages only ever name Poly-branded USB
+  headsets, so it may enumerate any UAC device or it may whitelist,
+  unknown until tried; and there is **no hybrid null**, so the mix-minus
+  has to be genuinely clean or the caller hears themselves. Neither is a
+  reason not to test it - any USB-C dongle already in a drawer plus one
+  phone call answers it in five minutes, and the answer decides whether
+  Option A's ~$700 is necessary at all.
 
-**Recommendation as the research stands:** Universal Host inline on the
-handset cord, caller XLR into a board channel, mix-minus from the board
-into its line input. Fewest moving parts, and the phone still works as a
-phone off-air.
+**Recommendation as the research stands:** test Option C first because
+it is nearly free and would settle the question; if it fails to
+enumerate or the echo is unmanageable, buy Option A - Universal Host
+inline on the handset cord, caller XLR into a board channel, mix-minus
+from the board into its line input. Fewest moving parts, real DSP null,
+and the phone still works as a phone off-air.
 
-**Three things to confirm at the station before spending anything** -
-these are the real gate, not the product choice:
-- Is there a spare board channel, and can the console generate mix-minus?
-- Does the PBX allow a second SIP registration on that extension/DID?
-  (That is what unlocks Option B at all.)
-- Is there already a hybrid sitting on a dead POTS line in the rack? If
-  so, an ATA in front of it is a third route, not costed here.
+**The gate, updated 2026-07-31.** One question left, not three:
+- **OPEN: is there a spare board channel, and can the console generate
+  mix-minus?** Every option needs it, and Option C needs it *most* -
+  there is no null to cover a sloppy feed. Nothing should be bought
+  before this is answered.
+- ~~Does the PBX allow a second SIP registration?~~ Still unanswered but
+  now only gates Option B, which the recommendation no longer leads
+  with. Ask only if A and C both fail.
+- ~~Is there a hybrid on a dead POTS line?~~ **CLOSED 2026-07-31: no.**
+  The ATA route is dead; do not re-propose it.
 
 Sources: jkaudio.com/universal-host.htm, jkaudio.com/autohybrid_ip2.htm,
 E220 datasheets (RingCentral, Intermedia), ipphone-warehouse.com E220
