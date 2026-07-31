@@ -1179,6 +1179,42 @@ Sources: jkaudio.com/universal-host.htm, jkaudio.com/autohybrid_ip2.htm,
 E220 datasheets (RingCentral, Intermedia), ipphone-warehouse.com E220
 listing.
 
+### 13. Print the index in the header on PSA (and other) rows, for QC against the station's printed book - filed 2026-07-31, NOT built
+
+**Zach, 2026-07-31, filed for later - no work started, nothing designed.**
+Request as given: `psa` and other rows should **print the index in the
+header**, so it can be **quickly QC'd against the printed book at the
+station**. The point is eyes-on verification: read the header, find that
+index in the physical book, confirm they match, without hunting.
+
+This lands in #10's territory (the run sheet's row types are exactly
+`theme`/`sweeper N`/`music`/`psa`/`promo`/`calendar`/`closer`), and #10
+has a picked direction but no built surface yet - so there may be nothing
+to add the header *to* until that web UI exists. Worth checking that
+before treating this as a standalone task.
+
+Recorded as ambiguous rather than guessed at - all four of these were
+left unstated and change the work:
+- **Which output grows a header.** The run sheet itself (a Sheets
+  change, outside this repo)? The #10 web UI that does not exist yet? A
+  printed/PDF version of the run sheet? Something `wtul-rip` emits? "The
+  header" implies a specific artifact Zach has in mind.
+- **Which index.** The run sheet's own slot number (`1000`, `1003`, ...
+  HHMM), a PSA's identifier in the station's printed book, or a new
+  sequential index? QC "against the printed book" only works if the
+  printed index is the one shown - a slot time would not match the book
+  at all.
+- **What "and other" covers.** Literally every non-`psa` row type, or
+  the copy-carrying ones specifically (`promo`, `calendar`) which are
+  the rows that plausibly have book entries? `sweeper`/`music` rows
+  point at audio, not book copy.
+- **What the printed book actually is** - not documented anywhere in
+  this repo or in the `the-local-show` memory. Its structure decides
+  whether "index" is even a field that exists to print.
+
+Do not start until at least the first two are answered; the rest can be
+inferred once the artifact is named.
+
 ## Ideas (added via `scheduler -i`)
 
 - **2026-07-22 14:58 (via `scheduler -i`): RESOLVED 2026-07-24
