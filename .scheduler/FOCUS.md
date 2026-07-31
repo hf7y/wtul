@@ -1080,6 +1080,73 @@ Blocked by nothing external; it's undesigned, not unscheduled. Parked
 under the stability milestone like the rest of #9/#10 until the four
 questions above have answers.
 
+### 12. Poly Edge E220 -> board audio path - filed 2026-07-31, RESEARCH ONLY, nothing bought or built
+
+**Zach, 2026-07-31: research the studio's Poly Edge E220 IP phone and how
+to route its audio to the board.** Findings below are from vendor
+datasheets, **not from hands-on inspection of the actual phone or the
+studio rack** - treat every "the studio has X" as unverified. This is
+studio-hardware work, not a `wtul-rip` change; it shares this file only
+because this repo is where the show's tooling gets tracked.
+
+**What the E220 is.** A pure SIP endpoint. Ports: RJ-9 handset jack, a
+*separate* RJ-9 headset jack, an EHS port (optional APP-51 adapter),
+USB-C 2.0, Bluetooth 5.0/NFC, 2x RJ-45. **No line out, no 3.5mm, no
+analog phone line.**
+
+Three approaches that get tried first and are all dead ends here:
+- It **cannot** feed a POTS telephone hybrid (Telos/Gentner class) -
+  there is no analog line to hybrid.
+- It **cannot** be a USB soundcard - the USB-C port is host-side (it
+  drives a USB headset / storage), not a device port.
+- Bluetooth pairs a headset or a mobile *to* the phone; it does not
+  expose a capturable A2DP source. Don't plan around it.
+
+So the audio comes out via either the analog handset/headset cord or the
+SIP call itself.
+
+- **Option A - tap the handset cord (likely right answer).** JK Audio
+  **Universal Host** goes inline: phone base -> Universal Host ->
+  handset (RJ-22/RJ-9). Balanced XLR out (caller only) to a console
+  channel, plus 3.5mm stereo out with talent-left/caller-right for a
+  two-track record; balanced XLR in (mic/line) + 3.5mm line in for the
+  mix-minus feed. 16-bit DSP hybrid, ~50 dB null. Handset/Online button
+  switches between talking on the handset and through the board. Set the
+  handset-element selector for electret. **Verify on the real phone
+  before trusting it live** - some Poly handsets are wired non-standard;
+  test null and levels on an actual call. Cheaper record-only sibling: a
+  passive handset tap (JK Audio QuickTap / THAT-2 class) - summed mono,
+  no null, no send path; fine for recorded phoners, not for live
+  two-way.
+- **Option B - bypass the phone, register the SIP account elsewhere.**
+  Hardware: JK Audio **AutoHybrid IP2** (SIP endpoint, 2x XLR in / 2x
+  XLR out, auto-answer, ducking/AGC, PoE) - but it is **marked
+  discontinued**, so this means used gear or a current equivalent
+  (Comrex, Telos VX/VSet). Software, and the cheapest: a softphone
+  (Linphone/baresip/PJSUA) on a studio Linux box + PipeWire/JACK routing
+  - caller leg to a board channel, mix-minus back in. Zero new hardware
+  if an interface has a spare in/out, and it is scriptable (auto-answer,
+  call logging, recording the caller leg). Tradeoff: you own
+  echo/mix-minus yourself instead of buying a DSP null, and it is one
+  more box that has to not crash at 10am Friday.
+
+**Recommendation as the research stands:** Universal Host inline on the
+handset cord, caller XLR into a board channel, mix-minus from the board
+into its line input. Fewest moving parts, and the phone still works as a
+phone off-air.
+
+**Three things to confirm at the station before spending anything** -
+these are the real gate, not the product choice:
+- Is there a spare board channel, and can the console generate mix-minus?
+- Does the PBX allow a second SIP registration on that extension/DID?
+  (That is what unlocks Option B at all.)
+- Is there already a hybrid sitting on a dead POTS line in the rack? If
+  so, an ATA in front of it is a third route, not costed here.
+
+Sources: jkaudio.com/universal-host.htm, jkaudio.com/autohybrid_ip2.htm,
+E220 datasheets (RingCentral, Intermedia), ipphone-warehouse.com E220
+listing.
+
 ## Ideas (added via `scheduler -i`)
 
 - **2026-07-22 14:58 (via `scheduler -i`): RESOLVED 2026-07-24
