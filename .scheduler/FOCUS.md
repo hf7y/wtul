@@ -1304,6 +1304,36 @@ solve the actual pain? The whole conflict exists only because entry is
 concurrent with ripping. If concurrency is not load-bearing, the
 cheapest fix is neither of the two directions above.
 
+**Answered 2026-07-31 (Zach), and it reshapes the item.** Entry *after*
+the rip is fine in principle - the reason it isn't done today is that
+**it's hard to remember what's what** once the disc is done and the
+tracks are a list of anonymous files. So concurrency was never the
+requirement; **identification** was. Typing during the rip is a
+workaround for having the track in front of you while you still know
+which one it is.
+
+Which means the terminal conflict is a symptom, and the fix is not
+necessarily terminal work at all:
+
+> **"If fingerprinting and metadata scraping work, then yes we can go
+> async."** - Zach, 2026-07-31
+
+So **#14 is downstream of #11 and #2**, and should not be built before
+them:
+- **#11** (fingerprint-first on insert, cached indefinitely) is what
+  makes a finished track self-identifying instead of a filename.
+- **#2** (metadata-fix API against Discogs, token in hand) is the
+  scraping half.
+
+If those two land and work, live-during-rip entry stops being needed at
+all: the rip runs unattended, the tracks identify themselves, and
+whatever hand-correction remains happens afterwards against named
+tracks - no contention for the terminal, and neither the curses work nor
+the HUD pivot has to happen for this reason. **Recommended sequencing:
+do not spend effort on the CLI-vs-HUD choice until #11 and #2 are
+verified working.** If they land and identification is still poor, the
+two directions above are still on the table and unchanged.
+
 ## Ideas (added via `scheduler -i`)
 
 - **2026-07-22 14:58 (via `scheduler -i`): RESOLVED 2026-07-24
