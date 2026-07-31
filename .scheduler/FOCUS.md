@@ -1038,6 +1038,48 @@ Still needs, before `/wtul-batch` builds anything real:
   wtul-rip change - likely its own script/directory rather than bolted
   onto `bin/wtul-rip`.
 
+### 11. Fingerprint-first on insert, rip second - filed 2026-07-31, NOT designed, NOT built
+
+**Zach, 2026-07-31, filed for later - no work started.** Change the
+insert-time behaviour: instead of `cd-autorip.sh` going straight to a
+rip, **first take a fingerprint of the disc and of each track**, and keep
+that fingerprint **in cache indefinitely**. The rip becomes a second,
+separate step; the fingerprint is the thing that's cheap, permanent, and
+worth having whether or not the disc ever gets ripped.
+
+Why it's not just a reordering: today all fingerprinting is *post-rip*.
+`lib/metadata_lookup.py:50 fingerprint_file()` runs `fpcalc` over an
+already-ripped audio file, and `resolve_disc_metadata()` is called from
+`fix_by_discid()` in `bin/wtul-rip` - i.e. after the audio exists on
+disk. There is no on-insert fingerprint path at all.
+
+Genuinely undecided, do not guess:
+- **Which fingerprint, and can it be had without ripping?** Two different
+  things are being called "fingerprint" here. The *disc* one (TOC-derived
+  disc ID, the `read_toc_discid` / cddb-style identifier) is
+  near-instant and needs no audio read. The *per-track* AcoustID
+  fingerprint needs decoded audio, so "fingerprint each track before
+  ripping" still means reading every track off the disc - the saving is
+  in what's *kept and written*, not in drive time. Whether that's
+  acceptable (a full read pass on insert, discarding the audio) or
+  whether per-track fingerprints should only be computed when a rip
+  happens anyway, is the core call.
+- **Where the cache lives and what keys it.** Disc ID is the obvious key.
+  On-disk under `~/.cache/wtul-rip/` vs alongside `LOGDIR`? Format?
+  "Indefinitely" means it needs to survive a reinstall to be worth
+  anything - so it should be somewhere `install.sh` doesn't clobber.
+- **What the cache is actually *for*.** Re-inserting a known disc and
+  skipping straight to known metadata (no re-scrape)? Detecting "already
+  ripped this" before spending the rip? Feeding #2's metadata-fix path
+  without a rip? Each implies a different lookup surface.
+- **What insert does now, then.** If the rip no longer fires on insert,
+  something has to trigger it - prompt, separate command, or auto-rip
+  only when the fingerprint is unknown.
+
+Blocked by nothing external; it's undesigned, not unscheduled. Parked
+under the stability milestone like the rest of #9/#10 until the four
+questions above have answers.
+
 ## Ideas (added via `scheduler -i`)
 
 - **2026-07-22 14:58 (via `scheduler -i`): RESOLVED 2026-07-24
